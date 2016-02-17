@@ -2,11 +2,12 @@ package crawler
 
 import java.net.URL
 
+import org.apache.commons.lang3.StringEscapeUtils
 import org.mongodb.scala._
 import scala.io.Source
 import scala.collection.mutable
 
-class Crawler(domain: String, startPage: String = "/", linkRegexString: String, ignoreList: List[String],db: MongoDatabase) {
+class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRegexString: String, ignoreList: List[String],db: MongoDatabase, colectionName: String, encoding: String) {
 
   val linkRegex = linkRegexString.r
 
@@ -14,38 +15,41 @@ class Crawler(domain: String, startPage: String = "/", linkRegexString: String, 
   val frontier = new mutable.Queue[String]
 
   def getLinks(html: String): List[String] =
-    linkRegex.findAllMatchIn(html).map(_.toString.replaceAll("""href\s*=\s*\"*""","").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")).toList
+    linkRegex.findAllMatchIn(html).map( x =>
+      StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""","").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
+    ).toList
 
   def getHttp(url: String) = {
     url.contains(domain) match {
       case true => {
         try {
           val link: URL = new URL(url)
-          val in = Source.fromURL(link, "UTF-8")
-          val response = in.getLines.mkString("\n")
+          println(link)
+          val in = Source.fromURL(link, encoding)
+          val response = in.getLines.mkString
           in.close()
           response
         } catch {
-          case e: Exception => throw new Exception("InvalidRequest")
+          case e: Exception => throw new Exception("InvalidRequest: " + e.getMessage)
         }
       }
       case false => {
         try {
-          val link: URL = new URL(domain + url)
-
-          val in = Source.fromURL(link, "UTF-8")
-          val response = in.getLines.mkString("\n")
+          val link: URL = new URL( baseUrl + url)
+          println(link)
+          val in = Source.fromURL(link, encoding)
+          val response = in.getLines.mkString
           in.close()
           response
         } catch {
-          case e: Exception => throw new Exception("InvalidRequest")
+          case e: Exception => throw new Exception("InvalidRequest: " + e.getMessage)
         }
       }
     }
   }
 
-  def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks :List[String]) = {
-    val collection: MongoCollection[Document] = db.getCollection("pages")
+  def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks :List[String]) = async {
+    val collection: MongoCollection[Document] = db.getCollection(colectionName)
     val document: Document = Document("_id" -> pageCount, "url" -> url, "content" -> pageContent, "outbound" -> outboundLinks)
     val insertObservable: Observable[Completed] = collection.insertOne(document)
 
@@ -68,7 +72,7 @@ class Crawler(domain: String, startPage: String = "/", linkRegexString: String, 
     writePageToDb(pageCount, startPage, pageContent, outboundLinksFilter)
 
     while (frontier.nonEmpty) {
-      pageCount += 1
+
       val link: String = frontier.dequeue()
       visited ++= List[String](link)
       try {
@@ -98,9 +102,10 @@ class Crawler(domain: String, startPage: String = "/", linkRegexString: String, 
             }
           }
         }
+        pageCount += 1
         writePageToDb(pageCount, link, pageContent, outboundLinksFiltered);
       } catch {
-        case e: Exception => println("Ignored Request")
+        case e: Exception => println("Ignored Request: " + e.getMessage)
       }
     }
   }
