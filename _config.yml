@@ -9,8 +9,8 @@
 title: Reverse Engineering Static Content and Dynamic Behaviour of E-Commerce Sites for Fun and Profit
 email: jpdias@live.com.pt
 description: Dissertation - Reverse Engineering Static Content and Dynamic Behaviour of E-Commerce Sites for Fun and Profit - Faculdade de Engenharia da Universidade do Porto
-baseurl: "" # the subpath of your site, e.g. /blog
-url: "http://jpdias.github.io/kugsha/" # the base hostname & protocol for your site
+baseurl: "/kugsha" # the subpath of your site, e.g. /blog
+url: "http://jpdias.github.io" # the base hostname & protocol for your site
 
 
 # Build settings
