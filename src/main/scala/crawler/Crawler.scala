@@ -1,13 +1,15 @@
 package crawler
 
-import java.net.URL
+import java.net.{URI, URL}
 
 import org.apache.commons.lang3.StringEscapeUtils
 import org.mongodb.scala._
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.io.Source
 import scala.collection.mutable
 
-class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRegexString: String, ignoreList: List[String],db: MongoDatabase, colectionName: String, encoding: String) {
+class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRegexString: String, ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, colectionName: String, encoding: String) {
 
   val linkRegex = linkRegexString.r
 
@@ -15,8 +17,11 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
   val frontier = new mutable.Queue[String]
 
   def getLinks(html: String): List[String] =
-    linkRegex.findAllMatchIn(html).map( x =>
-      StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""","").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
+    linkRegex.findAllMatchIn(html).map( x =>{
+      val link = StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""","").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
+      val linkNorm = new URI(link).normalize()
+      linkNorm.toString
+      }
     ).toList
 
   def getHttp(url: String) = {
@@ -24,7 +29,6 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
       case true => {
         try {
           val link: URL = new URL(url)
-          println(link)
           val in = Source.fromURL(link, encoding)
           val response = in.getLines.mkString
           in.close()
@@ -36,7 +40,6 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
       case false => {
         try {
           val link: URL = new URL( baseUrl + url)
-          println(link)
           val in = Source.fromURL(link, encoding)
           val response = in.getLines.mkString
           in.close()
@@ -48,7 +51,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
     }
   }
 
-  def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks :List[String]) = async {
+  def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks: List[String]) =  Future {
     val collection: MongoCollection[Document] = db.getCollection(colectionName)
     val document: Document = Document("_id" -> pageCount, "url" -> url, "content" -> pageContent, "outbound" -> outboundLinks)
     val insertObservable: Observable[Completed] = collection.insertOne(document)
@@ -61,27 +64,31 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
 
   }
 
+  def getFilteredPages(pageContent: String): Set[String] = {
+    val outboundLinks = getLinks(pageContent)
+    val outboundLinksFilterExtensions = outboundLinks.filter(x => !ignoreList.exists(x.endsWith))
+    val outboundLinksFilterUrlParts = outboundLinksFilterExtensions.filter(x => !ignoreUrlWithList.contains(x))
+    outboundLinksFilterUrlParts.toSet
+  }
+
   def start() = {
     var pageCount = 0
 
     val pageContent = getHttp(startPage)
-    val outboundLinks = getLinks(pageContent)
-    val outboundLinksFilter = outboundLinks.filter(x => !ignoreList.exists(x.endsWith))
-    frontier ++= outboundLinksFilter.toSet
+    val outboundLinks = getFilteredPages(pageContent)
+    frontier ++= outboundLinks
 
-    writePageToDb(pageCount, startPage, pageContent, outboundLinksFilter)
+    writePageToDb(pageCount, startPage, pageContent, outboundLinks.toList)
 
     while (frontier.nonEmpty) {
-
+      println(frontier.size)
       val link: String = frontier.dequeue()
       visited ++= List[String](link)
       try {
-        val pageContent = getHttp(link)
-        val outboundLinks = getLinks(pageContent)
+        val pageContent = getHttp(startPage)
+        val outboundLinks = getFilteredPages(pageContent)
 
-        val outboundLinksFiltered = outboundLinks.filter(x => !ignoreList.exists(x.endsWith))
-
-        outboundLinksFiltered.foreach { outLink: String =>
+        outboundLinks.foreach { outLink: String =>
           {
             visited.contains(outLink) match {
               case true => {
@@ -94,7 +101,6 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
                     if(!frontier.contains(outLink)){
                       println(outLink)
                       frontier.enqueue(outLink)
-                      println(frontier.size)
                     }
                   }
                 }
@@ -103,7 +109,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
           }
         }
         pageCount += 1
-        writePageToDb(pageCount, link, pageContent, outboundLinksFiltered);
+        writePageToDb(pageCount, link, pageContent, outboundLinks.toList);
       } catch {
         case e: Exception => println("Ignored Request: " + e.getMessage)
       }
