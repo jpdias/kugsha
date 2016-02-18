@@ -67,8 +67,8 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
   def getFilteredPages(pageContent: String): Set[String] = {
     val outboundLinks = getLinks(pageContent)
     val outboundLinksFilterExtensions = outboundLinks.filter(x => !ignoreList.exists(x.endsWith))
-    val outboundLinksFilterUrlParts = outboundLinksFilterExtensions.filter(x => !ignoreUrlWithList.contains(x))
-    outboundLinksFilterUrlParts.toSet
+    //val outboundLinksFilterUrlParts = outboundLinksFilterExtensions.filter(x => !ignoreUrlWithList.contains(x))
+    outboundLinksFilterExtensions.toSet
   }
 
   def start() = {
