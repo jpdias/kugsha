@@ -19,35 +19,21 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
   def getLinks(html: String): List[String] =
     linkRegex.findAllMatchIn(html).map( x =>{
       val link = StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""","").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
-      val linkNorm = new URI(link).normalize()
-      linkNorm.toString
+      var linkNorm = new URI(link).normalize()
+      if(!linkNorm.isAbsolute) {
+        linkNorm = new URI(baseUrl).resolve(linkNorm)
       }
-    ).toList
+      linkNorm.toString
+  }).toList
 
   def getHttp(url: String) = {
-    url.contains(domain) match {
-      case true => {
-        try {
-          val link: URL = new URL(url)
-          val in = Source.fromURL(link, encoding)
-          val response = in.getLines.mkString
-          in.close()
-          response
-        } catch {
-          case e: Exception => throw new Exception("InvalidRequest: " + e.getMessage)
-        }
-      }
-      case false => {
-        try {
-          val link: URL = new URL( baseUrl + url)
-          val in = Source.fromURL(link, encoding)
-          val response = in.getLines.mkString
-          in.close()
-          response
-        } catch {
-          case e: Exception => throw new Exception("InvalidRequest: " + e.getMessage)
-        }
-      }
+    try {
+      val in = Source.fromURL(url, encoding)
+      val response = in.getLines.mkString
+      in.close()
+      response
+    } catch {
+      case e: Exception => throw new Exception("InvalidRequest: " + e.getMessage)
     }
   }
 
@@ -67,25 +53,26 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
   def getFilteredPages(pageContent: String): Set[String] = {
     val outboundLinks = getLinks(pageContent)
     val outboundLinksFilterExtensions = outboundLinks.filter(x => !ignoreList.exists(x.endsWith))
-    //val outboundLinksFilterUrlParts = outboundLinksFilterExtensions.filter(x => !ignoreUrlWithList.contains(x))
-    outboundLinksFilterExtensions.toSet
+    val outboundLinksFilterUrlParts = outboundLinksFilterExtensions.filter(x => !ignoreUrlWithList.contains(x))
+    val outboundLinksFilterDomain = outboundLinksFilterUrlParts.filter(x => x.contains(domain))
+    outboundLinksFilterDomain.toSet
   }
 
   def start() = {
     var pageCount = 0
 
-    val pageContent = getHttp(startPage)
+    val pageContent = getHttp(baseUrl+startPage)
     val outboundLinks = getFilteredPages(pageContent)
     frontier ++= outboundLinks
 
-    writePageToDb(pageCount, startPage, pageContent, outboundLinks.toList)
+    writePageToDb(pageCount, baseUrl+startPage, pageContent, outboundLinks.toList)
 
     while (frontier.nonEmpty) {
       println(frontier.size)
       val link: String = frontier.dequeue()
       visited ++= List[String](link)
       try {
-        val pageContent = getHttp(startPage)
+        val pageContent = getHttp(link)
         val outboundLinks = getFilteredPages(pageContent)
 
         outboundLinks.foreach { outLink: String =>
@@ -95,14 +82,9 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
                 println("Already Visited")
               }
               case false => {
-                outLink.contains(domain) match {
-                  case false => println("Outside Page")
-                  case true => {
-                    if(!frontier.contains(outLink)){
-                      println(outLink)
-                      frontier.enqueue(outLink)
-                    }
-                  }
+                if(!frontier.contains(outLink)){
+                  //println(outLink)
+                  frontier.enqueue(outLink)
                 }
               }
             }
