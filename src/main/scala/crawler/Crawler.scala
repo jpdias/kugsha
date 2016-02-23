@@ -1,6 +1,6 @@
 package crawler
 
-import java.net.{URI, URL}
+import java.net.{ URI, URL }
 
 import org.apache.commons.lang3.StringEscapeUtils
 import org.mongodb.scala._
@@ -12,19 +12,18 @@ import scala.collection.mutable
 class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRegexString: String, ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, colectionName: String, encoding: String) {
 
   val linkRegex = linkRegexString.r
-
   var visited = List[String]()
   val frontier = new mutable.Queue[String]
 
   def getLinks(html: String): List[String] =
-    linkRegex.findAllMatchIn(html).map( x =>{
-      val link = StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""","").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
+    linkRegex.findAllMatchIn(html).map(x => {
+      val link = StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""", "").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
       var linkNorm = new URI(link).normalize()
-      if(!linkNorm.isAbsolute) {
+      if (!linkNorm.isAbsolute) {
         linkNorm = new URI(baseUrl).resolve(linkNorm)
       }
       linkNorm.toString
-  }).toList
+    }).toList
 
   def getHttp(url: String) = {
     try {
@@ -37,7 +36,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
     }
   }
 
-  def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks: List[String]) =  Future {
+  def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks: List[String]) = Future {
     val collection: MongoCollection[Document] = db.getCollection(colectionName)
     val document: Document = Document("_id" -> pageCount, "url" -> url, "content" -> pageContent, "outbound" -> outboundLinks)
     val insertObservable: Observable[Completed] = collection.insertOne(document)
@@ -58,14 +57,14 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
     outboundLinksFilterDomain.toSet
   }
 
-  def start() = {
+  def start = {
     var pageCount = 0
 
-    val pageContent = getHttp(baseUrl+startPage)
+    val pageContent = getHttp(baseUrl + startPage)
     val outboundLinks = getFilteredPages(pageContent)
     frontier ++= outboundLinks
 
-    writePageToDb(pageCount, baseUrl+startPage, pageContent, outboundLinks.toList)
+    writePageToDb(pageCount, baseUrl + startPage, pageContent, outboundLinks.toList)
 
     while (frontier.nonEmpty) {
       println(frontier.size)
@@ -82,7 +81,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
                 println("Already Visited")
               }
               case false => {
-                if(!frontier.contains(outLink)){
+                if (!frontier.contains(outLink)) {
                   //println(outLink)
                   frontier.enqueue(outLink)
                 }
