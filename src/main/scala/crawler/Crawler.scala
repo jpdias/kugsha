@@ -1,13 +1,18 @@
 package crawler
 
 import java.net.{ URI, URL }
+import org.jsoup.{ nodes, Jsoup }
+import org.jsoup.Jsoup._
 
 import org.apache.commons.lang3.StringEscapeUtils
+import org.jsoup.nodes.Element
+import org.jsoup.select.Elements
 import org.mongodb.scala._
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.io.Source
 import scala.collection.mutable
+import collection.JavaConversions._
 
 class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRegexString: String, ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, colectionName: String, encoding: String) {
 
@@ -15,15 +20,24 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
   var visited = List[String]()
   val frontier = new mutable.Queue[String]
 
-  def getLinks(html: String): List[String] =
-    linkRegex.findAllMatchIn(html).map(x => {
-      val link = StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""", "").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
+  def getLinks(html: String): List[String] = {
+    val doc: nodes.Document = Jsoup.parse(html)
+    val links: Elements = doc.select("a[href]")
+    val refs = mutable.Set[String]()
+    for (link: Element <- links) {
+      val ext = link.attr("abs:href").replaceAll("""#(.+)""", "").stripSuffix("/")
+      refs += ext
+    }
+    refs.toList
+  }
+  /*  linkRegex.findAllMatchIn(html).map(x => {
+      val link = StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""", "").replaceAll("""#(.+)""", "").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
       var linkNorm = new URI(link).normalize()
       if (!linkNorm.isAbsolute) {
         linkNorm = new URI(baseUrl).resolve(linkNorm)
       }
       linkNorm.toString
-    }).toList
+    }).toList*/
 
   def getHttp(url: String) = {
     try {
@@ -71,6 +85,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
       val link: String = frontier.dequeue()
       visited ++= List[String](link)
       try {
+        println(link)
         val pageContent = getHttp(link)
         val outboundLinks = getFilteredPages(pageContent)
 
