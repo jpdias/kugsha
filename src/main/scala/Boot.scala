@@ -22,7 +22,6 @@ object Boot {
   val protocol = configFile.getString("kugsha.crawler.protocol")
   val domain = configFile.getString("kugsha.crawler.domain")
   val startPage = configFile.getString("kugsha.crawler.startPage")
-  val linkRegex = configFile.getString("kugsha.crawler.linkRegex")
   val ignoreList = configFile.getStringList("kugsha.crawler.ignoreList").toList
   val ignoreUrlWithList = configFile.getStringList("kugsha.crawler.ignoreUrlWithList").toList
   val encoding = configFile.getString("kugsha.crawler.encoding")
@@ -51,7 +50,7 @@ object Boot {
   def main(args: Array[String]) {
     val client: MongoClient = MongoClient(connString)
     val db: MongoDatabase = client.getDatabase(dbname)
-    val crawler = new Crawler(protocol + domain, domain, startPage, linkRegex, ignoreList, ignoreUrlWithList, db, collectionName, encoding)
+    val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding)
     crawler.start
     /*
     val categorization = new Categorization(db, collectionName, classifierSelector)

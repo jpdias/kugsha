@@ -1,10 +1,6 @@
 package crawler
 
-import java.net.{ URI, URL }
 import org.jsoup.{ nodes, Jsoup }
-import org.jsoup.Jsoup._
-
-import org.apache.commons.lang3.StringEscapeUtils
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 import org.mongodb.scala._
@@ -14,9 +10,8 @@ import scala.io.Source
 import scala.collection.mutable
 import collection.JavaConversions._
 
-class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRegexString: String, ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, colectionName: String, encoding: String) {
+class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, colectionName: String, encoding: String) {
 
-  val linkRegex = linkRegexString.r
   var visited = List[String]()
   val frontier = new mutable.Queue[String]
 
@@ -25,19 +20,11 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", linkRege
     val links: Elements = doc.select("a[href]")
     val refs = mutable.Set[String]()
     for (link: Element <- links) {
-      val ext = link.attr("abs:href").replaceAll("""#(.+)""", "").stripSuffix("/")
+      val ext = link.attr("abs:href").stripSuffix("/").replaceAll("""#(.+)""", "").stripSuffix("/")
       refs += ext
     }
     refs.toList
   }
-  /*  linkRegex.findAllMatchIn(html).map(x => {
-      val link = StringEscapeUtils.unescapeHtml4(x.toString()).replaceAll("""href\s*=\s*\"*""", "").replaceAll("""#(.+)""", "").stripPrefix("'").stripPrefix("\"").stripSuffix("'").stripSuffix("\"")
-      var linkNorm = new URI(link).normalize()
-      if (!linkNorm.isAbsolute) {
-        linkNorm = new URI(baseUrl).resolve(linkNorm)
-      }
-      linkNorm.toString
-    }).toList*/
 
   def getHttp(url: String) = {
     try {
