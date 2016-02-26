@@ -25,6 +25,7 @@ object Boot {
   val ignoreList = configFile.getStringList("kugsha.crawler.ignoreList").toList
   val ignoreUrlWithList = configFile.getStringList("kugsha.crawler.ignoreUrlWithList").toList
   val encoding = configFile.getString("kugsha.crawler.encoding")
+  val ignoreParams = configFile.getStringList("kugsha.crawler.ignoreParams").toList
 
   val classifierSelector = configFile.getStringList("kugsha.classification.categories").toList
 
@@ -50,7 +51,7 @@ object Boot {
   def main(args: Array[String]) {
     val client: MongoClient = MongoClient(connString)
     val db: MongoDatabase = client.getDatabase(dbname)
-    val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding)
+    val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
     crawler.start
     /*
     val categorization = new Categorization(db, collectionName, classifierSelector)

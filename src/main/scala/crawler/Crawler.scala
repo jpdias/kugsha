@@ -1,5 +1,7 @@
 package crawler
 
+import com.netaporter.uri.Uri
+import com.netaporter.uri.Uri.parse
 import org.jsoup.{ nodes, Jsoup }
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
@@ -10,7 +12,7 @@ import scala.io.Source
 import scala.collection.mutable
 import collection.JavaConversions._
 
-class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, colectionName: String, encoding: String) {
+class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, collectionName: String, encoding: String, ignoreParams: Seq[String]) {
 
   var visited = List[String]()
   val frontier = new mutable.Queue[String]
@@ -18,11 +20,16 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
   def getLinks(html: String): List[String] = {
     val doc: nodes.Document = Jsoup.parse(html)
     val links: Elements = doc.select("a[href]")
-    val refs = mutable.Set[String]()
-    for (link: Element <- links) {
-      val ext = link.attr("abs:href").stripSuffix("/").replaceAll("""#(.+)""", "").stripSuffix("/")
-      refs += ext
-    }
+
+    val refs: Seq[String] = links.map { link: Element =>
+      {
+        var ext = link.attr("abs:href").replaceAll("""#(.+)""", "")
+        var uri: Uri = parse(ext)
+        uri = uri.removeParams(ignoreParams)
+        ext = uri.toString.stripSuffix("/")
+        ext
+      }
+    }.toSeq
     refs.toList
   }
 
@@ -38,7 +45,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
   }
 
   def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks: List[String]) = Future {
-    val collection: MongoCollection[Document] = db.getCollection(colectionName)
+    val collection: MongoCollection[Document] = db.getCollection(collectionName)
     val document: Document = Document("_id" -> pageCount, "url" -> url, "content" -> pageContent, "outbound" -> outboundLinks)
     val insertObservable: Observable[Completed] = collection.insertOne(document)
 
@@ -72,7 +79,6 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
       val link: String = frontier.dequeue()
       visited ++= List[String](link)
       try {
-        println(link)
         val pageContent = getHttp(link)
         val outboundLinks = getFilteredPages(pageContent)
 
@@ -84,7 +90,6 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
               }
               case false => {
                 if (!frontier.contains(outLink)) {
-                  //println(outLink)
                   frontier.enqueue(outLink)
                 }
               }
