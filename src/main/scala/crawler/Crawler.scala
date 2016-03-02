@@ -1,6 +1,7 @@
 package crawler
 
 import com.netaporter.uri.Uri
+import java.net.URI
 import com.netaporter.uri.Uri.parse
 import org.jsoup.{ nodes, Jsoup }
 import org.jsoup.nodes.Element
@@ -19,18 +20,29 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
 
   def getLinks(html: String): List[String] = {
     val doc: nodes.Document = Jsoup.parse(html)
+    doc.setBaseUri(baseUrl)
     val links: Elements = doc.select("a[href]")
 
-    val refs: Seq[String] = links.map { link: Element =>
+    links.map { link: Element =>
       {
-        var ext = link.attr("abs:href").replaceAll("""#(.+)""", "")
-        var uri: Uri = parse(ext)
-        uri = uri.removeParams(ignoreParams)
-        ext = uri.toString.stripSuffix("/")
-        ext
+        try {
+          var ext = link.attr("href")
+
+          if (!URI.create(ext).isAbsolute) {
+            ext = baseUrl + ext
+          }
+          var uri: Uri = parse(ext)
+          uri = uri.removeParams(ignoreParams)
+          ext = uri.toString.replaceAll("""#(.+)""", "").stripSuffix("/")
+          ext
+        } catch {
+          case e: Exception => {
+            println("Bad URL: " + e.getMessage)
+            ""
+          }
+        }
       }
-    }.toSeq
-    refs.toList
+    }.filter(_.nonEmpty).toSeq.toList
   }
 
   def getHttp(url: String) = {
@@ -60,7 +72,13 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
   def getFilteredPages(pageContent: String): Set[String] = {
     val outboundLinks = getLinks(pageContent)
     val outboundLinksFilterExtensions = outboundLinks.filter(x => !ignoreList.exists(x.endsWith))
-    val outboundLinksFilterUrlParts = outboundLinksFilterExtensions.filter(x => !ignoreUrlWithList.contains(x))
+
+    val outboundLinksFilterUrlParts = outboundLinksFilterExtensions.filterNot { url =>
+      {
+        ignoreUrlWithList.exists(url.contains)
+      }
+    }
+
     val outboundLinksFilterDomain = outboundLinksFilterUrlParts.filter(x => x.contains(domain))
     outboundLinksFilterDomain.toSet
   }
@@ -81,7 +99,6 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
       try {
         val pageContent = getHttp(link)
         val outboundLinks = getFilteredPages(pageContent)
-
         outboundLinks.foreach { outLink: String =>
           {
             visited.contains(outLink) match {

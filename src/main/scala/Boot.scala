@@ -1,5 +1,6 @@
 import java.util.concurrent.TimeUnit
 
+import classification.Categorization
 import com.typesafe.config.ConfigFactory
 import crawler.Crawler
 import database.Helpers._
@@ -51,13 +52,12 @@ object Boot {
   def main(args: Array[String]) {
     val client: MongoClient = MongoClient(connString)
     val db: MongoDatabase = client.getDatabase(dbname)
-    val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
-    crawler.start
-    /*
+    /*val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
+    crawler.start*/
+
     val categorization = new Categorization(db, collectionName, classifierSelector)
     categorization.classifyTask
 
-    */
     val graph = new MultiGraph("")
     graph.addAttribute("ui.label", "text-mode:normal")
     graph.setStrict(false)
