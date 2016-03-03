@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import com.netaporter.uri.Uri
 import com.netaporter.uri.Uri._
+import com.typesafe.config.{Config, ConfigIncluderFile, ConfigFactory}
 import database.Helpers._
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -18,7 +19,7 @@ import scala.concurrent.{ Await, Future }
 
 import scala.collection.JavaConversions._
 
-class Categorization(db: MongoDatabase, collectionName: String, selectorList: List[String]) {
+class Categorization(db: MongoDatabase, collectionName: String, selectorList: List[String], configFile: Config) {
   def classifyTask = {
     db.getCollection(collectionName).find().results().foreach { page =>
       {
@@ -31,24 +32,22 @@ class Categorization(db: MongoDatabase, collectionName: String, selectorList: Li
     val doc = Jsoup.parse(page.get("content").toString)
     val url: Uri = parse(page.get("url").toString)
 
-    val categories = doc.select("td>a.branco3:not(:first-child)")
-
-    val productPage = doc.select("#atab1.brancoxx")
-    val productList = doc.select("#produtos_normais")
+    val categories = doc.select(configFile.getString("kugsha.classification.selectors.categoriesArray"))
+    val productPage = doc.select(configFile.getString("kugsha.classification.selectors.productPage"))
+    val productList = doc.select(configFile.getString("kugsha.classification.selectors.productListPage"))
     if (!categories.isEmpty) {
       var cats: ListBuffer[String] = ListBuffer()
       for (el: Element <- categories) {
         cats += el.text
       }
       val rescats = Document("$set" -> Document("category" -> cats.map(x => x.toString).toList))
-      //db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), unset("category")).headResult()
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), rescats).headResult()
     }
-    if (!productPage.isEmpty && url.toString.contains("/2/")) {
+    if (!productPage.isEmpty && url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "product")).headResult()
-    } else if (!productList.isEmpty && url.toString.contains("/1/")) {
+    } else if (!productList.isEmpty && url.toString.contains(configFile.getString("kugsha.classification.urlRegex.productListPage"))) {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "list")).headResult()
-    } else if (url.toString.contains("nm_carrinho")) {
+    } else if (url.toString.contains(configFile.getString("kugsha.classification.urlRegex.cartPage"))) {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "cart")).headResult()
     } else {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "generic")).headResult()

@@ -33,7 +33,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
           }
           var uri: Uri = parse(ext)
           uri = uri.removeParams(ignoreParams)
-          ext = uri.toString.replaceAll("""#(.+)""", "").stripSuffix("/")
+          ext = uri.toString.replaceAll("""#(.+)""", "").stripSuffix("/") //TODO: verificar
           ext
         } catch {
           case e: Exception => {

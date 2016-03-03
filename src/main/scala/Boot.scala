@@ -15,7 +15,7 @@ import scala.concurrent.{ Await, Future }
 
 object Boot {
 
-  val configFile = ConfigFactory.load()
+  val configFile = ConfigFactory.load("clickfiel")
   val collectionName = configFile.getString("kugsha.database.collectionName")
   val connString = configFile.getString("kugsha.database.connString")
   val dbname = configFile.getString("kugsha.database.dbname")
@@ -55,7 +55,7 @@ object Boot {
     /*val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
     crawler.start*/
 
-    val categorization = new Categorization(db, collectionName, classifierSelector)
+    val categorization = new Categorization(db, collectionName, classifierSelector, configFile)
     categorization.classifyTask
 
     val graph = new MultiGraph("")
