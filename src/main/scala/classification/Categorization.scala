@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import com.netaporter.uri.Uri
 import com.netaporter.uri.Uri._
-import com.typesafe.config.{Config, ConfigIncluderFile, ConfigFactory}
+import com.typesafe.config.{ Config, ConfigIncluderFile, ConfigFactory }
 import database.Helpers._
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -19,7 +19,7 @@ import scala.concurrent.{ Await, Future }
 
 import scala.collection.JavaConversions._
 
-class Categorization(db: MongoDatabase, collectionName: String, selectorList: List[String], configFile: Config) {
+class Categorization(db: MongoDatabase, collectionName: String, configFile: Config) {
   def classifyTask = {
     db.getCollection(collectionName).find().results().foreach { page =>
       {

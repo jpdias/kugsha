@@ -28,8 +28,6 @@ object Boot {
   val encoding = configFile.getString("kugsha.crawler.encoding")
   val ignoreParams = configFile.getStringList("kugsha.crawler.ignoreParams").toList
 
-  val classifierSelector = configFile.getStringList("kugsha.classification.categories").toList
-
   import org.graphstream.graph.implementations._
 
   def draw(graph: MultiGraph, db: MongoDatabase): Future[MultiGraph] = Future {
@@ -55,7 +53,7 @@ object Boot {
     /*val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
     crawler.start*/
 
-    val categorization = new Categorization(db, collectionName, classifierSelector, configFile)
+    val categorization = new Categorization(db, collectionName, configFile)
     categorization.classifyTask
 
     val graph = new MultiGraph("")

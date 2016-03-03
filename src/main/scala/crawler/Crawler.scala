@@ -13,7 +13,7 @@ import scala.io.Source
 import scala.collection.mutable
 import collection.JavaConversions._
 
-class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, collectionName: String, encoding: String, ignoreParams: Seq[String]) {
+class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, collectionName: String, encoding: String, ignoreParams: Seq[String]) {
 
   var visited = List[String]()
   val frontier = new mutable.Queue[String]
@@ -33,7 +33,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String = "/", ignoreLi
           }
           var uri: Uri = parse(ext)
           uri = uri.removeParams(ignoreParams)
-          ext = uri.toString.replaceAll("""#(.+)""", "").stripSuffix("/") //TODO: verificar
+          ext = uri.toString.replaceAll("""#(.+)""", "") //.stripSuffix("/") //TODO: verificar
           ext
         } catch {
           case e: Exception => {
