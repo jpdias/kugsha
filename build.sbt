@@ -11,6 +11,7 @@ libraryDependencies ++= Seq(
   "org.jsoup"          %  "jsoup"              % "1.8.3",
   "org.graphstream"    %  "gs-core"            % "1.3",
   "org.graphstream"    %  "gs-ui"              % "1.3",
-  "com.netaporter"     %% "scala-uri"          % "0.4.13"
+  "com.netaporter"     %% "scala-uri"          % "0.4.13",
+  "com.github.nscala-time" %% "nscala-time"    % "2.10.0"
 )
 

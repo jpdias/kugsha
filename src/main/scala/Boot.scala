@@ -4,6 +4,7 @@ import classification.Categorization
 import com.typesafe.config.ConfigFactory
 import crawler.Crawler
 import database.Helpers._
+import logfile.Parse
 import org.bson.BsonString
 import org.graphstream.ui.view.{ View, Viewer }
 import org.mongodb.scala._
@@ -53,16 +54,24 @@ object Boot {
     /*val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
     crawler.start*/
 
-    val categorization = new Categorization(db, collectionName, configFile)
-    categorization.classifyTask
+    //val categorization = new Categorization(db, collectionName, configFile)
+    //categorization.classifyTask
 
-    val graph = new MultiGraph("")
-    graph.addAttribute("ui.label", "text-mode:normal")
-    graph.setStrict(false)
-    graph.setAutoCreate(true)
-    graph.addAttribute("ui.stylesheet", "node {fill-color: red; size-mode: dyn-size;} edge {fill-color:grey;}")
+    //val graph = new MultiGraph("")
+    //graph.addAttribute("ui.label", "text-mode:normal")
+    //graph.setStrict(false)
+    //graph.setAutoCreate(true)
+    //graph.addAttribute("ui.stylesheet", "node {fill-color: red; size-mode: dyn-size;} edge {fill-color:grey;}")
 
-    Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
+    //Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
+
+    val parse = new Parse("C:\\Users\\Win10\\Desktop\\log.txt", configFile, db, collectionName)
+
+    parse.sessions(parse.ParseLog())
+
+    println(parse.users)
+
+    parse.saveProfiles
 
     println("finished")
 
