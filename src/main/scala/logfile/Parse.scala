@@ -15,9 +15,8 @@ import database.Helpers._
 
 case class Profile(id: String, preferencesProbabilities: mutable.HashMap[String, Double], visitedPages: mutable.ListBuffer[String])
 
-class Parse(logPath: String, configFile: Config, db: MongoDatabase, collectionName: String) {
+class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
 
-  val lines = Source.fromFile(logPath).getLines.toList
   val users = mutable.HashMap[String, Profile]()
 
   def ParseLog() = {
@@ -26,9 +25,12 @@ class Parse(logPath: String, configFile: Config, db: MongoDatabase, collectionNa
     val timestampPosition = configFile.getInt("kugsha.profiles.logfile.timestampPosition")
     val urlPosition = configFile.getInt("kugsha.profiles.logfile.urlPosition")
     val ignoreList = configFile.getStringList("kugsha.profiles.logfile.ignoreList").toList
+    val logPath = configFile.getString("kugsha.profiles.logfile.path")
 
     val protocol = configFile.getString("kugsha.crawler.protocol")
     val base = configFile.getString("kugsha.crawler.domain")
+
+    val lines = Source.fromFile(logPath).getLines.toList
 
     val res = lines.map { line: String =>
       val lineSplited: List[String] = line.split(delimiter).toList
@@ -83,7 +85,7 @@ class Parse(logPath: String, configFile: Config, db: MongoDatabase, collectionNa
     }
   }
 
-  def saveProfiles = {
+  def saveProfiles(users: mutable.HashMap[String, Profile]) = {
     users.foreach { u =>
       {
         val collection: MongoCollection[Document] = db.getCollection("profiles")

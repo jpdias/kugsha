@@ -93,7 +93,9 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
     writePageToDb(pageCount, baseUrl + startPage, pageContent, outboundLinks.toList)
 
     while (frontier.nonEmpty) {
+
       println(frontier.size)
+
       val link: String = frontier.dequeue()
       visited ++= List[String](link)
       try {
@@ -101,14 +103,12 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
         val outboundLinks = getFilteredPages(pageContent)
         outboundLinks.foreach { outLink: String =>
           {
-            visited.contains(outLink) match {
-              case true => {
-                println("Already Visited")
-              }
-              case false => {
-                if (!frontier.contains(outLink)) {
-                  frontier.enqueue(outLink)
-                }
+            if(visited.contains(outLink)) {
+              println("Already Visited")
+            }
+            else {
+              if (!frontier.contains(outLink)) {
+                frontier.enqueue(outLink)
               }
             }
           }

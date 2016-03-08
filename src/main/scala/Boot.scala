@@ -65,15 +65,13 @@ object Boot {
 
     //Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
 
-    val parse = new Parse("C:\\Users\\Win10\\Desktop\\log.txt", configFile, db, collectionName)
+    val parse = new Parse(configFile, db, collectionName)
 
     parse.sessions(parse.ParseLog())
 
-    println(parse.users)
+    parse.saveProfiles(parse.users)
 
-    parse.saveProfiles
-
-    println("finished")
+    println("Finished.")
 
     client.close
   }
