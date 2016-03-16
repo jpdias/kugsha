@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import com.netaporter.uri.Uri
 import com.netaporter.uri.Uri._
-import com.typesafe.config.{ Config, ConfigIncluderFile, ConfigFactory }
+import com.typesafe.config.Config
 import database.Helpers._
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element

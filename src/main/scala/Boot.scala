@@ -52,19 +52,19 @@ object Boot {
     val client: MongoClient = MongoClient(connString)
     val db: MongoDatabase = client.getDatabase(dbname)
     /*val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
-    crawler.start*/
+    crawler.start
+*/
+    /* val categorization = new Categorization(db, collectionName, configFile)
+    categorization.classifyTask*/
 
-    //val categorization = new Categorization(db, collectionName, configFile)
-    //categorization.classifyTask
+    /*val graph = new MultiGraph("")
+    graph.addAttribute("ui.label", "text-mode:normal")
+    graph.setStrict(false)
+    graph.setAutoCreate(true)
+    graph.addAttribute("ui.stylesheet", "node {fill-color: red; size-mode: dyn-size;} edge {fill-color:grey;}")
 
-    //val graph = new MultiGraph("")
-    //graph.addAttribute("ui.label", "text-mode:normal")
-    //graph.setStrict(false)
-    //graph.setAutoCreate(true)
-    //graph.addAttribute("ui.stylesheet", "node {fill-color: red; size-mode: dyn-size;} edge {fill-color:grey;}")
-
-    //Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
-
+    Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
+*/
     val parse = new Parse(configFile, db, collectionName)
 
     parse.sessions(parse.ParseLog())

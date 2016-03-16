@@ -3,7 +3,9 @@ package logfile
 import com.netaporter.uri.Uri
 import com.typesafe.config.Config
 import com.netaporter.uri.dsl._
-import org.bson.BsonArray
+import org.bson.{ BsonString, BsonArray }
+import org.joda.time._
+import org.joda.time.format.DateTimeFormat
 import org.mongodb.scala._
 import org.mongodb.scala.bson.collection.mutable.Document
 
@@ -13,7 +15,16 @@ import scala.io._
 import scala.collection.JavaConversions._
 import database.Helpers._
 
-case class Profile(id: String, preferencesProbabilities: mutable.HashMap[String, Double], visitedPages: mutable.ListBuffer[String])
+case class Profile(
+  id: String,
+  preferencesProbabilities: mutable.HashMap[String, Double],
+  pageTypeProbabilities: mutable.HashMap[String, Double],
+  visitedPages: mutable.ListBuffer[(mutable.ListBuffer[String], Long)],
+  var firstTime: DateTime,
+  averageTime: Long
+)
+
+case class LogEntry(id: String, timestamp: DateTime, url: String)
 
 class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
 
@@ -26,61 +37,96 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
     val urlPosition = configFile.getInt("kugsha.profiles.logfile.urlPosition")
     val ignoreList = configFile.getStringList("kugsha.profiles.logfile.ignoreList").toList
     val logPath = configFile.getString("kugsha.profiles.logfile.path")
-
-    val protocol = configFile.getString("kugsha.crawler.protocol")
-    val base = configFile.getString("kugsha.crawler.domain")
+    val dateFormat = configFile.getString("kugsha.profiles.logfile.dateFormat")
 
     val lines = Source.fromFile(logPath).getLines.toList
 
-    val res = lines.map { line: String =>
+    lines.flatMap { line: String =>
       val lineSplited: List[String] = line.split(delimiter).toList
       // userId, timestamp, url
       if (!ignoreList.exists(lineSplited.get(urlPosition).contains(_))) {
-        val allUrl: Uri = protocol + "www." + base + lineSplited.get(urlPosition)
+        val allUrl: Uri = "http://www.clickfiel.pt" + lineSplited.get(urlPosition)
         val canon: Uri = allUrl.removeAllParams()
-        List(lineSplited.get(userIdPosition), lineSplited.get(timestampPosition), canon.toString.stripSuffix("/"))
-      } else
-        List()
-    }.filter(_.nonEmpty)
-    res
+        Some(
+          LogEntry(
+            lineSplited.get(userIdPosition),
+            DateTimeFormat.forPattern(dateFormat).parseDateTime(lineSplited.get(timestampPosition)),
+            canon.toString.stripSuffix("/")
+          )
+        )
+      } else None
+    }
   }
 
-  def sessions(records: List[List[String]]) = {
-    records.map { rec =>
+  def sessions(records: List[LogEntry]) = {
+    records.foreach { rec =>
       {
-        val profile = users.get(rec.head) match {
-          case Some(p) => p
-          case None => Profile(rec.head, mutable.HashMap(), ListBuffer())
+        users.get(rec.id) match {
+          case Some(p) => {
+            println(rec.timestamp.getMillis + "--" + p.firstTime.getMillis)
+            println(rec.timestamp.getMillis - p.firstTime.getMillis)
+            if ((rec.timestamp.getMillis - p.firstTime.getMillis) > (15 * 60 * 1000)) {
+              val newSession = (ListBuffer(rec.url), 0l)
+              p.visitedPages += newSession
+              p.firstTime = rec.timestamp
+            } else {
+              p.visitedPages.last._1 += rec.url
+              val temp = (p.visitedPages.last._1, (rec.timestamp.getMillis - p.firstTime.getMillis))
+              p.visitedPages.trimEnd(1)
+              p.visitedPages += temp
+            }
+          }
+          case None => users += (rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, 0l))
         }
-        profile.visitedPages += rec.get(2)
-        users += (rec.head -> profile)
       }
     }
+
     val coll = db.getCollection(collectionName)
+
     users.foreach { (u: (String, Profile)) =>
       {
         val listCat = ListBuffer[String]()
-        u._2.visitedPages.foreach { url =>
+        val listType = ListBuffer[String]()
+
+        val allPages: ListBuffer[String] = u._2.visitedPages.flatMap(p => p._1)
+
+        val averageSessionTime = u._2.visitedPages.foldLeft(0l)((r, p) => r + (p._2 / u._2.visitedPages.size))
+
+        allPages.foreach { url =>
           {
+            println(url)
             val query = Document("url" -> url)
 
             coll.find(query).results().foreach { page =>
               page.get[BsonArray]("category") match {
                 case Some(cat) => listCat ++= cat.getValues.map(_.asString.getValue)
-                case _ => println("Not Found")
+                case _ => println("Cat not available")
+              }
+
+              page.get[BsonString]("type") match {
+                case Some(typ) => listType += typ.getValue
+                case _ => println("Not Found type")
               }
             }
           }
         }
-        val weights = mutable.HashMap[String, Double]()
+        val weightsProducts = mutable.HashMap[String, Double]()
         listCat.map(cat => {
-          weights.get(cat) match {
-            case Some(c) => weights += (cat -> (c + (1.0 / listCat.size)))
-            case None => weights += (cat -> (1.0 / listCat.size))
+          weightsProducts.get(cat) match {
+            case Some(c) => weightsProducts += (cat -> (c + (1.0 / listCat.size)))
+            case None => weightsProducts += (cat -> (1.0 / listCat.size))
           }
         })
 
-        users += (u._1 -> Profile(u._1, weights, u._2.visitedPages))
+        val weightsTypes = mutable.HashMap[String, Double]()
+        listType.map(typ => {
+          weightsTypes.get(typ) match {
+            case Some(t) => weightsTypes += (typ -> (t + (1.0 / listType.size)))
+            case None => weightsTypes += (typ -> (1.0 / listType.size))
+          }
+        })
+
+        users += (u._1 -> Profile(u._1, weightsProducts, weightsTypes, u._2.visitedPages, u._2.firstTime, averageSessionTime))
       }
     }
   }
@@ -88,8 +134,14 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
   def saveProfiles(users: mutable.HashMap[String, Profile]) = {
     users.foreach { u =>
       {
-        val collection: MongoCollection[Document] = db.getCollection("profiles")
-        val document: Document = Document("_id" -> u._1, "flowSequence" -> u._2.visitedPages, "preferences" -> u._2.preferencesProbabilities.toList)
+        val collection: MongoCollection[Document] = db.getCollection("clickfiel-profiles")
+        val document: Document = Document(
+          "_id" -> u._1,
+          "flowSequence" -> u._2.visitedPages.map(p => Document("flow" -> p._1.toList, "time" -> p._2 / 1000)).toList,
+          "preferences" -> u._2.preferencesProbabilities.toList,
+          "pageTypes" -> u._2.pageTypeProbabilities.toList,
+          "average" -> u._2.averageTime / 1000
+        )
         collection.insertOne(document).headResult()
       }
     }

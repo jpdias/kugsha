@@ -58,7 +58,8 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
 
   def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks: List[String]) = Future {
     val collection: MongoCollection[Document] = db.getCollection(collectionName)
-    val document: Document = Document("_id" -> pageCount, "url" -> url, "content" -> pageContent, "outbound" -> outboundLinks)
+
+    val document: Document = Document("_id" -> pageCount, "url" -> toRelative(url), "content" -> pageContent, "outbound" -> outboundLinks.map(toRelative))
     val insertObservable: Observable[Completed] = collection.insertOne(document)
 
     insertObservable.subscribe(new Observer[Completed] {
@@ -66,7 +67,14 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
       override def onError(e: Throwable): Unit = println(s"onError: $e")
       override def onComplete(): Unit = println("onComplete")
     })
+  }
 
+  def toRelative(url: String): String = {
+    val relative = url.replace(baseUrl, "")
+    if (relative.isEmpty)
+      "/"
+    else
+      relative
   }
 
   def getFilteredPages(pageContent: String): Set[String] = {
@@ -103,10 +111,9 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
         val outboundLinks = getFilteredPages(pageContent)
         outboundLinks.foreach { outLink: String =>
           {
-            if(visited.contains(outLink)) {
+            if (visited.contains(outLink)) {
               println("Already Visited")
-            }
-            else {
+            } else {
               if (!frontier.contains(outLink)) {
                 frontier.enqueue(outLink)
               }
