@@ -16,7 +16,7 @@ import scala.concurrent.{ Await, Future }
 
 object Boot {
 
-  val configFile = ConfigFactory.load("clickfiel")
+  val configFile = ConfigFactory.load("4paper")
   val collectionName = configFile.getString("kugsha.database.collectionName")
   val connString = configFile.getString("kugsha.database.connString")
   val dbname = configFile.getString("kugsha.database.dbname")
@@ -67,7 +67,7 @@ object Boot {
 */
     val parse = new Parse(configFile, db, collectionName)
 
-    parse.sessions(parse.ParseLog())
+    parse.sessions(parse.ParseJsonLog())
 
     parse.saveProfiles(parse.users)
 

@@ -20,7 +20,7 @@ import scala.concurrent.{ Await, Future }
 import scala.collection.JavaConversions._
 
 class Categorization(db: MongoDatabase, collectionName: String, configFile: Config) {
-  def classifyTask = {
+  def classifyTask(): Unit = {
     db.getCollection(collectionName).find().results().foreach { page =>
       {
         Await.result(findAndSetCategory(page), Duration(10, TimeUnit.SECONDS))
@@ -35,6 +35,11 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
     val categories = doc.select(configFile.getString("kugsha.classification.selectors.categoriesArray"))
     val productPage = doc.select(configFile.getString("kugsha.classification.selectors.productPage"))
     val productList = doc.select(configFile.getString("kugsha.classification.selectors.productListPage"))
+
+    val price = doc.select(configFile.getString("kugsha.classification.selectors.price"))
+    val prodName = doc.select(configFile.getString("kugsha.classification.selectors.productName"))
+    val isDynamic = doc.select(configFile.getString("kugsha.classification.selectors.dynamicPart"))
+
     if (!categories.isEmpty) {
       var cats: ListBuffer[String] = ListBuffer()
       for (el: Element <- categories) {
@@ -45,12 +50,19 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
     }
     if (!productPage.isEmpty && url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "product")).headResult()
+      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("price", price.text)).headResult()
+      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("productName", prodName.text)).headResult()
     } else if (!productList.isEmpty && url.toString.contains(configFile.getString("kugsha.classification.urlRegex.productListPage"))) {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "list")).headResult()
     } else if (url.toString.contains(configFile.getString("kugsha.classification.urlRegex.cartPage"))) {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "cart")).headResult()
     } else {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "generic")).headResult()
+    }
+    if (!isDynamic.isEmpty) {
+      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("isDynamic", true)).headResult()
+    } else {
+      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("isDynamic", false)).headResult()
     }
   }
 }

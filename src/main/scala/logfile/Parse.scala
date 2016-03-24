@@ -1,9 +1,10 @@
 package logfile
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.netaporter.uri.Uri
 import com.typesafe.config.Config
 import com.netaporter.uri.dsl._
-import org.bson.{ BsonString, BsonArray }
+import org.bson.{ BsonArray, BsonString }
 import org.joda.time._
 import org.joda.time.format.DateTimeFormat
 import org.mongodb.scala._
@@ -14,6 +15,7 @@ import scala.collection.mutable.ListBuffer
 import scala.io._
 import scala.collection.JavaConversions._
 import database.Helpers._
+import play.api.libs.json._
 
 case class Profile(
   id: String,
@@ -26,10 +28,12 @@ case class Profile(
 
 case class LogEntry(id: String, timestamp: DateTime, url: String)
 
+case class LogPageEntry(url: String, kind: String, category: String)
+
 class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
 
   val users = mutable.HashMap[String, Profile]()
-
+  val pages = mutable.HashMap[String, LogPageEntry]()
   def ParseLog() = {
     val delimiter = configFile.getString("kugsha.profiles.logfile.delimiter")
     val userIdPosition = configFile.getInt("kugsha.profiles.logfile.userIdPosition")
@@ -58,30 +62,80 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
     }
   }
 
+  def ParseJsonLog() = {
+    val logPath = configFile.getString("kugsha.profiles.logfile.path")
+    val dateFormat = configFile.getString("kugsha.profiles.logfile.dateFormat")
+    val domain = configFile.getString("kugsha.crawler.domain").replace("www.", "")
+    val filename = logPath
+    val res = mutable.ListBuffer[LogEntry]()
+
+    Source.fromFile(filename, "UTF-8").getLines.map { line =>
+
+      val json = Json.parse(line)
+
+      val domain = (json \ "uri" \ "query" \ "clientId").asOpt[String]
+      (json \ "meta" \ "type").asOpt[String] match {
+        case Some(_) =>
+          val url = (json \ "uri" \ "query" \ "location").asOpt[String]
+          val uid = (json \ "meta" \ "uid").asOpt[String]
+          val timestamp = (json \ "meta" \ "timestamp").asOpt[String]
+          val cat = (json \ "uri" \ "query" \ "category").asOpt[String]
+          val typ = (json \ "meta" \ "type").asOpt[String]
+          if (url.isDefined && uid.isDefined && timestamp.isDefined) {
+            pages += (url.getOrElse("NotDefined") -> LogPageEntry(url.getOrElse("NotDefined"), typ.getOrElse("NotDefined"), cat.getOrElse("NotDefined")))
+            res += LogEntry(uid.get, DateTimeFormat.forPattern(dateFormat).parseDateTime(timestamp.get), url.get)
+          }
+        case None => None
+      }
+    }
+    res.toList
+  }
+
+  def getUrlInfoDb(url: String): (Option[List[String]], Option[String]) = {
+
+    val coll = db.getCollection(collectionName)
+
+    val query = Document("url" -> url)
+
+    coll.find(query).results().headOption.map { page =>
+      val category = page.get[BsonArray]("category") match {
+        case Some(cat) => Some(cat.getValues.map(_.asString.getValue).toList)
+        case _ => None
+      }
+      val kind = page.get[BsonString]("type") match {
+        case Some(typ) => Some(typ.getValue)
+        case _ => None
+      }
+      (category, kind)
+    }.getOrElse((None, None))
+  }
+
+  def getUrlInfoLogs(url: String): (Option[List[String]], Option[String]) = {
+    pages.get(url) match {
+      case Some(r) => (Some(List(r.category)), Some(r.kind))
+      case _ => (None, None)
+    }
+  }
+
   def sessions(records: List[LogEntry]) = {
     records.foreach { rec =>
       {
         users.get(rec.id) match {
-          case Some(p) => {
-            println(rec.timestamp.getMillis + "--" + p.firstTime.getMillis)
-            println(rec.timestamp.getMillis - p.firstTime.getMillis)
+          case Some(p) =>
             if ((rec.timestamp.getMillis - p.firstTime.getMillis) > (15 * 60 * 1000)) {
               val newSession = (ListBuffer(rec.url), 0l)
               p.visitedPages += newSession
               p.firstTime = rec.timestamp
             } else {
               p.visitedPages.last._1 += rec.url
-              val temp = (p.visitedPages.last._1, (rec.timestamp.getMillis - p.firstTime.getMillis))
+              val temp = (p.visitedPages.last._1, rec.timestamp.getMillis - p.firstTime.getMillis)
               p.visitedPages.trimEnd(1)
               p.visitedPages += temp
             }
-          }
           case None => users += (rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, 0l))
         }
       }
     }
-
-    val coll = db.getCollection(collectionName)
 
     users.foreach { (u: (String, Profile)) =>
       {
@@ -94,20 +148,13 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
 
         allPages.foreach { url =>
           {
-            println(url)
-            val query = Document("url" -> url)
 
-            coll.find(query).results().foreach { page =>
-              page.get[BsonArray]("category") match {
-                case Some(cat) => listCat ++= cat.getValues.map(_.asString.getValue)
-                case _ => println("Cat not available")
-              }
+            val info = getUrlInfoDb(url) //JSON: getUrlInfoLogs
 
-              page.get[BsonString]("type") match {
-                case Some(typ) => listType += typ.getValue
-                case _ => println("Not Found type")
-              }
-            }
+            if (info._1.isDefined)
+              listCat ++= info._1.get
+            if (info._2.isDefined)
+              listType += info._2.get
           }
         }
         val weightsProducts = mutable.HashMap[String, Double]()
