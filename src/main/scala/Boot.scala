@@ -16,7 +16,7 @@ import scala.concurrent.{ Await, Future }
 
 object Boot {
 
-  val configFile = ConfigFactory.load("4paper")
+  val configFile = ConfigFactory.load("kk")
   val collectionName = configFile.getString("kugsha.database.collectionName")
   val connString = configFile.getString("kugsha.database.connString")
   val dbname = configFile.getString("kugsha.database.dbname")
@@ -65,8 +65,10 @@ object Boot {
 
     Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
 */
-    val parse = new Parse(configFile, db, collectionName)
+    //JSON vs Normal
+    val parse = new Parse(configFile, db, collectionName, true)
 
+    //TODO: change automatic by true/false
     parse.sessions(parse.ParseJsonLog())
 
     parse.saveProfiles(parse.users)

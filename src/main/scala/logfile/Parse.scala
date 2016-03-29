@@ -30,10 +30,11 @@ case class LogEntry(id: String, timestamp: DateTime, url: String)
 
 case class LogPageEntry(url: String, kind: String, category: String)
 
-class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
+class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSON: Boolean) {
 
   val users = mutable.HashMap[String, Profile]()
   val pages = mutable.HashMap[String, LogPageEntry]()
+
   def ParseLog() = {
     val delimiter = configFile.getString("kugsha.profiles.logfile.delimiter")
     val userIdPosition = configFile.getInt("kugsha.profiles.logfile.userIdPosition")
@@ -49,7 +50,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
       val lineSplited: List[String] = line.split(delimiter).toList
       // userId, timestamp, url
       if (!ignoreList.exists(lineSplited.get(urlPosition).contains(_))) {
-        val allUrl: Uri = "http://www.clickfiel.pt" + lineSplited.get(urlPosition)
+        val allUrl: Uri = lineSplited.get(urlPosition)
         val canon: Uri = allUrl.removeAllParams()
         Some(
           LogEntry(
@@ -66,24 +67,24 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
     val logPath = configFile.getString("kugsha.profiles.logfile.path")
     val dateFormat = configFile.getString("kugsha.profiles.logfile.dateFormat")
     val domain = configFile.getString("kugsha.crawler.domain").replace("www.", "")
-    val filename = logPath
     val res = mutable.ListBuffer[LogEntry]()
 
-    Source.fromFile(filename, "UTF-8").getLines.map { line =>
+    Source.fromFile(logPath, "UTF-8").getLines.foreach { line =>
 
       val json = Json.parse(line)
 
-      val domain = (json \ "uri" \ "query" \ "clientId").asOpt[String]
       (json \ "meta" \ "type").asOpt[String] match {
         case Some(_) =>
-          val url = (json \ "uri" \ "query" \ "location").asOpt[String]
-          val uid = (json \ "meta" \ "uid").asOpt[String]
-          val timestamp = (json \ "meta" \ "timestamp").asOpt[String]
-          val cat = (json \ "uri" \ "query" \ "category").asOpt[String]
-          val typ = (json \ "meta" \ "type").asOpt[String]
-          if (url.isDefined && uid.isDefined && timestamp.isDefined) {
-            pages += (url.getOrElse("NotDefined") -> LogPageEntry(url.getOrElse("NotDefined"), typ.getOrElse("NotDefined"), cat.getOrElse("NotDefined")))
-            res += LogEntry(uid.get, DateTimeFormat.forPattern(dateFormat).parseDateTime(timestamp.get), url.get)
+          val url = Uri.parse((json \ "uri" \ "query" \ "location").asOpt[String].getOrElse("")).removeAllParams
+          if (url.contains(domain)) {
+            val uid = (json \ "meta" \ "uid").asOpt[String]
+            val timestamp = (json \ "meta" \ "timestamp").asOpt[String]
+            val cat = (json \ "uri" \ "query" \ "category").asOpt[String]
+            val typ = (json \ "meta" \ "type").asOpt[String]
+            if (uid.isDefined && timestamp.isDefined) {
+              pages += (url.toString -> LogPageEntry(url.toString, typ.getOrElse("NotDefined"), cat.getOrElse("NotDefined")))
+              res += LogEntry(uid.get, DateTimeFormat.forPattern(dateFormat).parseDateTime(timestamp.get), url.toString)
+            }
           }
         case None => None
       }
@@ -149,12 +150,20 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
         allPages.foreach { url =>
           {
 
-            val info = getUrlInfoDb(url) //JSON: getUrlInfoLogs
+            if (isJSON) {
+              val info = getUrlInfoLogs(url)
+              if (info._1.isDefined)
+                listCat ++= info._1.get
+              if (info._2.isDefined)
+                listType += info._2.get
+            } else {
+              val info = getUrlInfoDb(url)
+              if (info._1.isDefined)
+                listCat ++= info._1.get
+              if (info._2.isDefined)
+                listType += info._2.get
+            }
 
-            if (info._1.isDefined)
-              listCat ++= info._1.get
-            if (info._2.isDefined)
-              listType += info._2.get
           }
         }
         val weightsProducts = mutable.HashMap[String, Double]()
@@ -181,7 +190,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String) {
   def saveProfiles(users: mutable.HashMap[String, Profile]) = {
     users.foreach { u =>
       {
-        val collection: MongoCollection[Document] = db.getCollection("clickfiel-profiles")
+        val collection: MongoCollection[Document] = db.getCollection(configFile.getString("kugsha.crawler.domain") + "-profiles")
         val document: Document = Document(
           "_id" -> u._1,
           "flowSequence" -> u._2.visitedPages.map(p => Document("flow" -> p._1.toList, "time" -> p._2 / 1000)).toList,
