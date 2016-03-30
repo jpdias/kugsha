@@ -65,11 +65,11 @@ object Boot {
 
     Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
 */
-    //JSON vs Normal
+    //isJson: True/False
+
     val parse = new Parse(configFile, db, collectionName, true)
 
-    //TODO: change automatic by true/false
-    parse.sessions(parse.ParseJsonLog())
+    parse.sessions(parse.ParseLog())
 
     parse.saveProfiles(parse.users)
 

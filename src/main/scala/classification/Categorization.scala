@@ -59,10 +59,10 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
     } else {
       db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "generic")).headResult()
     }
-    if (!isDynamic.isEmpty) {
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("isDynamic", true)).headResult()
-    } else {
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("isDynamic", false)).headResult()
-    }
+
+    val dynamicExists = !isDynamic.isEmpty
+
+    db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("isDynamic", dynamicExists)).headResult()
+
   }
 }
