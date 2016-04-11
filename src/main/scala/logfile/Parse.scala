@@ -22,7 +22,8 @@ case class Profile(
   pageTypeProbabilities: mutable.HashMap[String, Double],
   visitedPages: mutable.ListBuffer[(mutable.ListBuffer[String], Long)],
   var firstTime: DateTime,
-  averageTime: Long
+  averageTime: Option[Long],
+  totalPageViews: Option[Int]
 )
 
 case class LogEntry(id: String, timestamp: DateTime, url: String)
@@ -95,9 +96,6 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
 
         if (url.contains(domain) && eventType.isDefined && eventType.get.equals("pageView")) {
 
-          //TODO: Extract fields
-          //TODO:  java.lang.IllegalArgumentException: Invalid BSON field name Shakers, Garrafas e Caixas Comp.
-
           val uid = (json \ "meta" \ "uid").asOpt[String]
           val timestamp = (json \ "meta" \ "timestamp").asOpt[String]
           val cat = (json \ "uri" \ "query" \ "category").asOpt[String]
@@ -157,7 +155,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
   def getUrlInfoLogs(url: String): (Option[List[String]], Option[String]) = {
 
     pages.get(url) match {
-      case Some(r) => (Some(List(r.category)), Some(r.kind))
+      case Some(r) => (Some(List(r.category.replace(".", "").replace("$", ""))), Some(r.kind))
       case _ => (None, None)
     }
   }
@@ -178,7 +176,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
               p.visitedPages.trimEnd(1)
               p.visitedPages += temp
             }
-          case None => users += (rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, 0l))
+          case None => users += (rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, None, None))
         }
       }
     }
@@ -194,7 +192,6 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
 
         allPages.foreach { url =>
           {
-
             val info = if (isJSON) {
               getUrlInfoLogs(url)
             } else {
@@ -223,7 +220,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
           }
         })
 
-        users += (u._1 -> Profile(u._1, weightsProducts, weightsTypes, u._2.visitedPages, u._2.firstTime, averageSessionTime))
+        users += (u._1 -> Profile(u._1, weightsProducts, weightsTypes, u._2.visitedPages, u._2.firstTime, Some(averageSessionTime), Some(allPages.size)))
       }
     }
   }
@@ -234,10 +231,11 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
         val collection: MongoCollection[Document] = db.getCollection(configFile.getString("kugsha.crawler.domain") + "-profiles")
         val document: Document = Document(
           "_id" -> u._1,
-          "flowSequence" -> u._2.visitedPages.map(p => Document("flow" -> p._1.toList, "time" -> p._2 / 1000)).toList,
+          "flowSequence" -> u._2.visitedPages.map(p => Document("flow" -> p._1.toList, "time" -> Math.abs(p._2 / 1000))).toList,
           "preferences" -> u._2.preferencesProbabilities.toList,
           "pageTypes" -> u._2.pageTypeProbabilities.toList,
-          "average" -> u._2.averageTime / 1000
+          "averageSessionTime" -> Math.abs(u._2.averageTime.getOrElse(0l) / 1000.0),
+          "totalPageViews" -> u._2.totalPageViews.getOrElse(0)
         )
         collection.insertOne(document).headResult()
       }
