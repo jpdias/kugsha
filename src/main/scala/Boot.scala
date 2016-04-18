@@ -51,11 +51,11 @@ object Boot {
   def main(args: Array[String]) {
     val client: MongoClient = MongoClient(connString)
     val db: MongoDatabase = client.getDatabase(dbname)
-    /*val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
-    crawler.start
-*/
-    /* val categorization = new Categorization(db, collectionName, configFile)
-    categorization.classifyTask*/
+    //val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
+    //crawler.start
+
+    val categorization = new Categorization(db, collectionName, configFile)
+    categorization.classifyTask
 
     /*val graph = new MultiGraph("")
     graph.addAttribute("ui.label", "text-mode:normal")
@@ -67,11 +67,11 @@ object Boot {
 */
     //isJson: True/False
 
-    val parse = new Parse(configFile, db, collectionName, true)
+    // val parse = new Parse(configFile, db, collectionName, true)
 
-    parse.sessions(parse.ParseLog())
+    // parse.sessions(parse.ParseLog())
 
-    parse.saveProfiles(parse.users)
+    //parse.saveProfiles(parse.users)
 
     println("Finished.")
 

@@ -16,16 +16,29 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ Await, Future }
-
 import scala.collection.JavaConversions._
 
 class Categorization(db: MongoDatabase, collectionName: String, configFile: Config) {
   def classifyTask(): Unit = {
-    db.getCollection(collectionName).find().results().foreach { page =>
-      {
-        Await.result(findAndSetCategory(page), Duration(10, TimeUnit.SECONDS))
+    var count = 0
+    val total = db.getCollection(collectionName).count().headResult()
+    while (total > count) {
+      val queryRes = db.getCollection(collectionName).find(Document("_id" -> count)).results().headOption
+      queryRes match {
+        case Some(p) => findAndSetCategory(p)
+        case _ => println("Not Found")
       }
+      count += 1
+      if (count % 3000 == 0)
+        println(count)
     }
+
+    // Lets run a query for all Martins and print out the json representation of each document
+    /*val query = db.getCollection(collectionName).find().subscribe(
+      (page: Document) => findAndSetCategory(page),                         // onNext
+      (error: Throwable) => println(s"Query failed: ${error.getMessage}"), // onError
+      () => println("Done")                                               // onComplete
+    )*/
   }
 
   def findAndSetCategory(page: Document) = Future {
@@ -40,29 +53,54 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
     val prodName = doc.select(configFile.getString("kugsha.classification.selectors.productName"))
     val isDynamic = doc.select(configFile.getString("kugsha.classification.selectors.dynamicPart"))
 
+    var updateAll = Document()
+
     if (!categories.isEmpty) {
       var cats: ListBuffer[String] = ListBuffer()
       for (el: Element <- categories) {
         cats += el.text
       }
-      val rescats = Document("$set" -> Document("category" -> cats.map(x => x.toString).toList))
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), rescats).headResult()
-    }
-    if (!productPage.isEmpty && url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "product")).headResult()
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("price", price.text)).headResult()
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("productName", prodName.text)).headResult()
-    } else if (!productList.isEmpty && url.toString.contains(configFile.getString("kugsha.classification.urlRegex.productListPage"))) {
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "list")).headResult()
-    } else if (url.toString.contains(configFile.getString("kugsha.classification.urlRegex.cartPage"))) {
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "cart")).headResult()
-    } else {
-      db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("type", "generic")).headResult()
+      updateAll ++= Document("category" -> cats.map(x => x.toString).toList)
     }
 
+    val urlRegexExists = configFile.hasPath("kugsha.classification.urlRegex")
+    if (urlRegexExists) {
+      if (!productPage.isEmpty && url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
+        updateAll ++= Document("type" -> "product")
+        updateAll ++= Document("price" -> price.text)
+        updateAll ++= Document("productName" -> prodName.text)
+      } else if (!productList.isEmpty && url.toString.contains(configFile.getString("kugsha.classification.urlRegex.productListPage"))) {
+        updateAll ++= Document("type" -> "list")
+      } else if (!price.isEmpty) {
+        updateAll ++= Document("cart" -> true)
+      } else {
+        updateAll ++: Document("type" -> "generic")
+      }
+    } else {
+      if (!productPage.isEmpty) {
+        updateAll ++= Document("type" -> "product")
+        updateAll ++= Document("price" -> price.text)
+        updateAll ++= Document("productName" -> prodName.text)
+        if (!price.isEmpty)
+          updateAll ++= Document("cart" -> true)
+      } else if (!productList.isEmpty) {
+        updateAll ++= Document("type" -> "list")
+      } else {
+        updateAll ++: Document("type" -> "generic")
+      }
+    }
     val dynamicExists = !isDynamic.isEmpty
 
-    db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), set("isDynamic", dynamicExists)).headResult()
+    updateAll ++= Document("isDynamic" -> dynamicExists)
 
+    if (dynamicExists) {
+      var dynamicCount = 0
+      for (el: Element <- isDynamic) {
+        dynamicCount += el.children().length
+      }
+      updateAll ++= Document("dynamicCount" -> dynamicCount)
+    }
+
+    db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), Document("$set" -> updateAll)).headResult()
   }
 }

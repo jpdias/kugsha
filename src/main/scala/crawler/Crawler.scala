@@ -15,7 +15,7 @@ import collection.JavaConversions._
 
 class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, collectionName: String, encoding: String, ignoreParams: Seq[String]) {
 
-  var visited = List[String]()
+  var visited = mutable.Set[String]()
   val frontier = new mutable.Queue[String]
 
   def getLinks(html: String): List[String] = {
@@ -33,8 +33,11 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
           }
           var uri: Uri = parse(ext)
           uri = uri.removeParams(ignoreParams)
-          ext = uri.toString.replaceAll("""#(.+)""", "") //.stripSuffix("/") //TODO: verificar
-          ext
+          ext = uri.toString.replaceAll("""#(.+)""", "").replace("#", "")
+          if (toRelative(ext) == "/")
+            baseUrl + "/"
+          else
+            ext
         } catch {
           case e: Exception => {
             println("Bad URL: " + e.getMessage)
@@ -42,7 +45,7 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
           }
         }
       }
-    }.filter(_.nonEmpty).toSeq.toList
+    }.filter(_.nonEmpty).toList.distinct
   }
 
   def getHttp(url: String) = {
@@ -59,19 +62,21 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
   def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks: List[String]) = Future {
     val collection: MongoCollection[Document] = db.getCollection(collectionName)
 
-    val document: Document = Document("_id" -> pageCount, "url" -> toRelative(url), "content" -> pageContent, "outbound" -> outboundLinks.map(toRelative))
+    val document: Document = Document("_id" -> pageCount, "url" -> toRelative(url), "content" -> pageContent, "outbound" -> outboundLinks.map(toRelative).distinct)
     val insertObservable: Observable[Completed] = collection.insertOne(document)
 
     insertObservable.subscribe(new Observer[Completed] {
       override def onNext(result: Completed): Unit = println(s"onNext: $result")
+
       override def onError(e: Throwable): Unit = println(s"onError: $e")
+
       override def onComplete(): Unit = println("onComplete")
     })
   }
 
   def toRelative(url: String): String = {
     val relative = url.replace(baseUrl, "")
-    if (relative.isEmpty)
+    if (relative.isEmpty || relative == "/")
       "/"
     else
       relative
@@ -105,23 +110,18 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
       println(frontier.size)
 
       val link: String = frontier.dequeue()
-      visited ++= List[String](link)
+      visited ++= Set[String](link)
       try {
         val pageContent = getHttp(link)
         val outboundLinks = getFilteredPages(pageContent)
         outboundLinks.foreach { outLink: String =>
           {
-            if (visited.contains(outLink)) {
-              println("Already Visited")
-            } else {
-              if (!frontier.contains(outLink)) {
-                frontier.enqueue(outLink)
-              }
-            }
+            if (!visited.contains(outLink) && !frontier.contains(outLink))
+              frontier.enqueue(outLink)
           }
         }
         pageCount += 1
-        writePageToDb(pageCount, link, pageContent, outboundLinks.toList);
+        writePageToDb(pageCount, link, pageContent, outboundLinks.toList)
       } catch {
         case e: Exception => println("Ignored Request: " + e.getMessage)
       }
