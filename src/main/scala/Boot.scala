@@ -3,6 +3,7 @@ import java.util.concurrent.TimeUnit
 import classification.Categorization
 import com.typesafe.config.ConfigFactory
 import crawler.Crawler
+import logfile.Clustering
 import database.Helpers._
 import logfile.Parse
 import org.bson.BsonString
@@ -18,6 +19,7 @@ object Boot {
 
   val configFile = ConfigFactory.load("kk")
   val collectionName = configFile.getString("kugsha.database.collectionName")
+  val profilesCollectionName = configFile.getString("kugsha.database.profilesCollectionName")
   val connString = configFile.getString("kugsha.database.connString")
   val dbname = configFile.getString("kugsha.database.dbname")
 
@@ -54,8 +56,8 @@ object Boot {
     //val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
     //crawler.start
 
-    val categorization = new Categorization(db, collectionName, configFile)
-    categorization.classifyTask
+    // val categorization = new Categorization(db, collectionName, configFile)
+    //categorization.classifyTask
 
     /*val graph = new MultiGraph("")
     graph.addAttribute("ui.label", "text-mode:normal")
@@ -67,11 +69,15 @@ object Boot {
 */
     //isJson: True/False
 
-    // val parse = new Parse(configFile, db, collectionName, true)
+    //val parse = new Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
 
     // parse.sessions(parse.ParseLog())
 
     //parse.saveProfiles(parse.users)
+
+    val newClustering = new Clustering(configFile, db, profilesCollectionName)
+
+    newClustering.loadData
 
     println("Finished.")
 

@@ -13,6 +13,8 @@ libraryDependencies ++= Seq(
   "org.graphstream"        %  "gs-ui"              % "1.3",
   "com.netaporter"         %% "scala-uri"          % "0.4.13",
   "com.github.nscala-time" %% "nscala-time"        % "2.10.0",
-  "com.typesafe.play"      %  "play-json_2.11"     % "2.5.0"
+  "com.typesafe.play"      %  "play-json_2.11"     % "2.5.0",
+  "org.apache.spark"       %% "spark-core"         % "1.5.0",
+  "org.apache.spark"       %% "spark-mllib"        % "1.5.0"
 )
 

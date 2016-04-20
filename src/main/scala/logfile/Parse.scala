@@ -8,7 +8,6 @@ import org.joda.time._
 import org.joda.time.format.DateTimeFormat
 import org.mongodb.scala._
 import org.mongodb.scala.bson.collection.mutable.Document
-
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io._

@@ -1,7 +1,5 @@
 package classification
 
-import java.util.concurrent.TimeUnit
-
 import com.netaporter.uri.Uri
 import com.netaporter.uri.Uri._
 import com.typesafe.config.Config
@@ -10,12 +8,9 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.mongodb.scala._
 import org.mongodb.scala.model.Filters._
-import org.mongodb.scala.model.Updates._
-
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-import scala.concurrent.{ Await, Future }
+import scala.concurrent.Future
 import scala.collection.JavaConversions._
 
 class Categorization(db: MongoDatabase, collectionName: String, configFile: Config) {
@@ -32,13 +27,6 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
       if (count % 3000 == 0)
         println(count)
     }
-
-    // Lets run a query for all Martins and print out the json representation of each document
-    /*val query = db.getCollection(collectionName).find().subscribe(
-      (page: Document) => findAndSetCategory(page),                         // onNext
-      (error: Throwable) => println(s"Query failed: ${error.getMessage}"), // onError
-      () => println("Done")                                               // onComplete
-    )*/
   }
 
   def findAndSetCategory(page: Document) = Future {
