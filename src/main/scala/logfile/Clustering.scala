@@ -113,8 +113,9 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
 
     val parsedData: RDD[Vector] = sc.parallelize(res.map(s => Vectors.dense(s.toArray))).cache()
 
-    val numClusters = 20 // Value of K in Kmeans
-    val clusters = KMeans.train(parsedData, numClusters, 20)
+    val numClusters = configFile.getInt("kugsha.profiles.numberOfClusters")
+    val numOfIterations = configFile.getInt("kugsha.profiles.numberOfIterations")
+    val clusters = KMeans.train(parsedData, numClusters, numOfIterations)
 
     val cost = clusters.computeCost(parsedData)
     println("cost = " + clusters.clusterCenters)
