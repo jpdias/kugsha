@@ -1,24 +1,19 @@
 package logfile
 
 import com.typesafe.config.Config
-
-import collection.JavaConverters._
-import org.mongodb.scala.{ MongoClient, MongoDatabase }
+import org.apache.spark.mllib.clustering.KMeans
+import org.apache.spark.mllib.linalg.{ Vector, Vectors }
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{ SparkConf, SparkContext }
+import org.mongodb.scala.{ Completed, Observable, Observer, Document => _, _ }
 import org.mongodb.scala.bson._
 import org.mongodb.scala.model.Projections._
 
 import scala.collection.JavaConversions._
-import scala.collection.immutable.Iterable
-import scala.collection.mutable.ListBuffer
 import database.Helpers._
-import org.apache.spark
-import org.apache.spark.mllib.clustering.KMeans
-import org.apache.spark.mllib.linalg.{ Vector, Vectors }
-import org.apache.spark.{ SparkConf, SparkContext }
-import org.apache.spark.rdd.RDD
-import org.apache.spark.serializer.KryoSerializer
 
-import scala.Iterable
+import scala.collection.mutable
+import scala.concurrent.Future
 
 class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) {
 
@@ -88,7 +83,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
           doc.get[BsonDocument]("preferences")
             .getOrElse(BsonDocument())
             .mapValues(value => value.asDouble().getValue)
-            .map(m => ("preferences", m._1) -> m._2)
+            .map(m => ("preferences", m._1.replace(",", "")) -> m._2)
             .toMap ++
             doc.get[BsonDocument]("pageTypes")
             .getOrElse(BsonDocument())
@@ -114,16 +109,33 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
     val parsedData: RDD[Vector] = sc.parallelize(res.map(s => Vectors.dense(s.toArray))).cache()
 
     val numClusters = configFile.getInt("kugsha.profiles.numberOfClusters")
-    val numOfIterations = configFile.getInt("kugsha.profiles.numberOfIterations")
+    val numOfIterations = configFile.getInt("kugsha.profiles.maxIterations")
     val clusters = KMeans.train(parsedData, numClusters, numOfIterations)
 
-    val cost = clusters.computeCost(parsedData)
-    println("cost = " + clusters.clusterCenters)
+    store(keys, clusters.clusterCenters)
 
     sc.stop()
-  }
-
-  def run = {
 
   }
+
+  def store(header: Set[(String, String)], data: Array[Vector]) = {
+
+    val keys = header.toList
+
+    data.foreach { arr =>
+      val preferences = mutable.HashMap[String, Double]()
+      val pageTypes = mutable.HashMap[String, Double]()
+      val currentArray = arr.toArray.toList
+      for (x <- 1 until keys.size) {
+        if (keys.get(x)._1 == "preferences")
+          preferences += keys.get(x)._2 -> currentArray.get(x)
+        else
+          pageTypes += keys.get(x)._2 -> currentArray.get(x)
+      }
+      val document: Document = Document("preferences" -> preferences.toList, "pageTypes" -> pageTypes.toList)
+      db.getCollection("kkprofilesproto").insertOne(document).headResult()
+    }
+
+  }
+
 }
