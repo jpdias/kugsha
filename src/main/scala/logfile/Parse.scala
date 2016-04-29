@@ -227,7 +227,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
   def saveProfiles(users: mutable.HashMap[String, Profile]) = {
     users.foreach { u =>
       {
-        val collection: MongoCollection[Document] = db.getCollection(configFile.getString("kugsha.crawler.domain") + "-profiles")
+        val collection: MongoCollection[Document] = db.getCollection(configFile.getString("kugsha.database.profilesCollectionName"))
         val document: Document = Document(
           "_id" -> u._1,
           "flowSequence" -> u._2.visitedPages.map(p => Document("flow" -> p._1.toList, "time" -> Math.abs(p._2 / 1000))).toList,

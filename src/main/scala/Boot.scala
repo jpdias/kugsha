@@ -1,19 +1,12 @@
-import java.util.concurrent.TimeUnit
-
-import classification.Categorization
 import com.typesafe.config.ConfigFactory
-import crawler.Crawler
-import logfile.Clustering
 import database.Helpers._
-import logfile.Parse
+import logfile.{ Clustering, Parse }
 import org.bson.BsonString
-import org.graphstream.ui.view.{ View, Viewer }
 import org.mongodb.scala._
 
 import scala.collection.JavaConversions._
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-import scala.concurrent.{ Await, Future }
+import scala.concurrent.Future
 
 object Boot {
 
@@ -71,9 +64,9 @@ object Boot {
 
     //val parse = new Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
 
-    // parse.sessions(parse.ParseLog())
+    //parse.sessions(parse.ParseLog())
 
-    //parse.saveProfiles(parse.users)
+    // parse.saveProfiles(parse.users)
 
     val newClustering = new Clustering(configFile, db, profilesCollectionName)
 
