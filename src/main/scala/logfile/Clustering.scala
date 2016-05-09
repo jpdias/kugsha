@@ -10,6 +10,7 @@ import org.mongodb.scala.bson._
 import org.mongodb.scala.model.Filters
 import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.{ Document => _, _ }
+import org.mongodb.scala.model.Aggregates._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -24,9 +25,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
   def loadData() = {
 
     val collectProfiles: Seq[EntryProfile] = db.getCollection(collectionName)
-      .find(Filters.gt("averageSessionTime", 0.0))
-      .limit(25000)
-      .projection(include("_id", "averageSessionTime", "totalPageViews", "preferences", "pageTypes"))
+      .aggregate(List(filter(Filters.gt("averageSessionTime", 0.0)), sample(25000), project(include("_id", "averageSessionTime", "totalPageViews", "preferences", "pageTypes"))))
       .results().map { doc =>
         {
           val rawData = doc.get[BsonDocument]("preferences")

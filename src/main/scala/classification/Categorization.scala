@@ -7,7 +7,9 @@ import database.Helpers._
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.mongodb.scala._
+import org.mongodb.scala.bson.BsonString
 import org.mongodb.scala.model.Filters._
+
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -30,8 +32,8 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
   }
 
   def findAndSetCategory(page: Document) = Future {
-    val doc = Jsoup.parse(page.get("content").toString)
-    val url: Uri = parse(page.get("url").toString)
+    val doc = Jsoup.parse(page.get("content").get.toString)
+    val url: Uri = parse(page.get[BsonString]("url").get.getValue)
 
     val categories = doc.select(configFile.getString("kugsha.classification.selectors.categoriesArray"))
     val productPage = doc.select(configFile.getString("kugsha.classification.selectors.productPage"))
