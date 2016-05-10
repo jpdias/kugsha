@@ -1,7 +1,6 @@
-import classification.Categorization
 import com.typesafe.config.ConfigFactory
 import database.Helpers._
-import logfile.{ Clustering, Parse }
+import logfile.Clustering
 import org.bson.BsonString
 import org.mongodb.scala._
 
@@ -50,8 +49,8 @@ object Boot {
     //val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
     //crawler.start
 
-    val categorization = new Categorization(db, collectionName, configFile)
-    categorization.classifyTask
+    //val categorization = new Categorization(db, collectionName, configFile)
+    //categorization.classifyTask
 
     /*val graph = new MultiGraph("")
     graph.addAttribute("ui.label", "text-mode:normal")
@@ -69,9 +68,9 @@ object Boot {
 
     // parse.saveProfiles(parse.users)
 
-    //val newClustering = new Clustering(configFile, db, profilesCollectionName)
+    val newClustering = new Clustering(configFile, db, profilesCollectionName)
 
-    //    newClustering.loadData
+    newClustering.loadData
 
     println("Finished.")
 

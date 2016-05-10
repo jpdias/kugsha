@@ -24,11 +24,16 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
 
   def loadData() = {
 
+    val catCollName = configFile.getString("kugsha.classification.categories.collectionName")
+
+    val x = "Volantes"
+    val r = db.getCollection(catCollName).find(Filters.in("children", x)).headResult().get[BsonArray]("parent").get.getValues.map(_.asString().getValue).mkString
+    printf(r.toString) ////Todo TODO TODO DO DO DO DO
     val collectProfiles: Seq[EntryProfile] = db.getCollection(collectionName)
       .aggregate(List(filter(Filters.gt("averageSessionTime", 0.0)), sample(25000), project(include("_id", "averageSessionTime", "totalPageViews", "preferences", "pageTypes"))))
       .results().map { doc =>
         {
-          val rawData = doc.get[BsonDocument]("preferences")
+          val rawData: Map[(String, String), Double] = doc.get[BsonDocument]("preferences")
             .getOrElse(BsonDocument())
             .mapValues(value => value.asDouble().getValue)
             .map(m => ("preferences", m._1) -> m._2)
@@ -38,6 +43,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
             .mapValues(value => value.asDouble().getValue)
             .map(m => ("pageTypes", m._1) -> m._2)
             .toMap
+
           EntryProfile(doc.get[BsonString]("_id").get.getValue, doc.get[BsonDouble]("averageSessionTime").get.getValue, doc.get[BsonInt32]("totalPageViews").get.getValue, rawData)
         }
       }
@@ -48,7 +54,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
 
     val res: Seq[List[Double]] = addZerosOpRes.map(x => x.values.toList)
 
-    clusteringStep(res, keys, collectProfiles)
+    //    clusteringStep(res, keys, collectProfiles)
 
   }
 

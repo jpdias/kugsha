@@ -10,13 +10,16 @@ import org.mongodb.scala._
 import org.mongodb.scala.bson.BsonString
 import org.mongodb.scala.model.Filters._
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.JavaConversions._
+import scala.collection._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.collection.JavaConversions._
 
 class Categorization(db: MongoDatabase, collectionName: String, configFile: Config) {
-  def classifyTask(): Unit = {
+
+  private val categoryTree = mutable.HashMap[List[String], mutable.Set[String]]()
+
+  def classifyTask() = {
     var count = 0
     val total = db.getCollection(collectionName).count().headResult()
     while (total > count) {
@@ -29,9 +32,14 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
       if (count % 3000 == 0)
         println(count)
     }
+
+    val tree = categoryTree.keySet.map(k => Document("parent" -> k, "children" -> categoryTree.get(k).get.toList))
+    val categoryTreeCollection = configFile.getString("kugsha.classification.categories.collectionName")
+    tree.map(db.getCollection(categoryTreeCollection).insertOne(_).headResult())
   }
 
   def findAndSetCategory(page: Document) = Future {
+
     val doc = Jsoup.parse(page.get("content").get.toString)
     val url: Uri = parse(page.get[BsonString]("url").get.getValue)
 
@@ -46,11 +54,15 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
     var updateAll = Document()
 
     if (!categories.isEmpty) {
-      var cats: ListBuffer[String] = ListBuffer()
-      for (el: Element <- categories) {
-        cats += el.text
+      val catList = categories.map(cat => cat.text).toList
+
+      val categoryDepth = configFile.getInt("kugsha.classification.categories.categoryDepth")
+      //create category tree with predefined category deepness
+      categoryTree.get(catList.take(categoryDepth)) match {
+        case Some(k) => k ++= catList.drop(categoryDepth)
+        case None => categoryTree += catList.take(categoryDepth) -> catList.drop(categoryDepth).to[mutable.Set]
       }
-      updateAll ++= Document("category" -> cats.map(x => x.toString).toList)
+      updateAll ++= Document("category" -> catList)
     }
 
     val urlRegexExists = configFile.hasPath("kugsha.classification.urlRegex")
