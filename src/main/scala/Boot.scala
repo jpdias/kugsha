@@ -46,9 +46,14 @@ object Boot {
   def main(args: Array[String]) {
     val client: MongoClient = MongoClient(connString)
     val db: MongoDatabase = client.getDatabase(dbname)
+
+    println("1 - Crawler")
+    //Crawler Step
     //val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
     //crawler.start
 
+    println("2 - Page info extract")
+    //Page information extraction + category tree
     //val categorization = new Categorization(db, collectionName, configFile)
     //categorization.classifyTask
 
@@ -60,16 +65,15 @@ object Boot {
 
     Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
 */
-    //isJson: True/False
-
+    println("3 - Logger parse and session split")
+    //Log Parse and Session splitting
     //val parse = new Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
-
     //parse.sessions(parse.ParseLog())
+    //parse.saveProfiles(parse.users)
 
-    // parse.saveProfiles(parse.users)
-
+    println("4 - Clustering")
+    //Clutering Profiles
     val newClustering = new Clustering(configFile, db, profilesCollectionName)
-
     newClustering.loadData
 
     println("Finished.")

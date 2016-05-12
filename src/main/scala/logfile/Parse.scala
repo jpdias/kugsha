@@ -16,13 +16,14 @@ import database.Helpers._
 import play.api.libs.json._
 
 case class Profile(
-  id: String,
+  id:                       String,
   preferencesProbabilities: mutable.HashMap[String, Double],
-  pageTypeProbabilities: mutable.HashMap[String, Double],
-  visitedPages: mutable.ListBuffer[(mutable.ListBuffer[String], Long)],
-  var firstTime: DateTime,
-  averageTime: Option[Long],
-  totalPageViews: Option[Int]
+  pageTypeProbabilities:    mutable.HashMap[String, Double],
+  visitedPages:             mutable.ListBuffer[(mutable.ListBuffer[String], Long)],
+  var firstTime:            DateTime,
+  averageTime:              Option[Long],
+  totalPageViews:           Option[Int],
+  averageTimePerPage:       Option[Long]
 )
 
 case class LogEntry(id: String, timestamp: DateTime, url: String)
@@ -112,10 +113,10 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
           else
             "notDefined"
 
-          val categ = if (cat.isDefined && cat.get.isEmpty) { Some("notDefined") } else cat
+          val cate = if (cat.isDefined && cat.get.isEmpty) { Some("notDefined") } else cat
 
           if (uid.isDefined && timestamp.isDefined) {
-            pages += (url.toString -> LogPageEntry(url.toString, kind, categ.getOrElse("notDefined")))
+            pages += (url.toString -> LogPageEntry(url.toString, kind, cate.getOrElse("notDefined")))
             res += LogEntry(uid.get, DateTimeFormat.forPattern(dateFormat).parseDateTime(timestamp.get), url.toString)
           }
         }
@@ -175,7 +176,9 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
               p.visitedPages.trimEnd(1)
               p.visitedPages += temp
             }
-          case None => users += (rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, None, None))
+          case None => users += (
+            rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, None, None)
+          )
         }
       }
     }
@@ -188,6 +191,8 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
         val allPages: ListBuffer[String] = u._2.visitedPages.flatMap(p => p._1)
 
         val averageSessionTime = u._2.visitedPages.foldLeft(0l)((r, p) => r + (p._2 / u._2.visitedPages.size))
+
+        val averageTimePerPage = averageSessionTime / u._2.visitedPages.map(x => x._1.length).sum
 
         allPages.foreach { url =>
           {
@@ -219,7 +224,9 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
           }
         })
 
-        users += (u._1 -> Profile(u._1, weightsProducts, weightsTypes, u._2.visitedPages, u._2.firstTime, Some(averageSessionTime), Some(allPages.size)))
+        users += (
+          u._1 -> Profile(u._1, weightsProducts, weightsTypes, u._2.visitedPages, u._2.firstTime, Some(averageSessionTime), Some(allPages.size), Some(averageTimePerPage))
+        )
       }
     }
   }
@@ -230,11 +237,15 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
         val collection: MongoCollection[Document] = db.getCollection(configFile.getString("kugsha.database.profilesCollectionName"))
         val document: Document = Document(
           "_id" -> u._1,
-          "flowSequence" -> u._2.visitedPages.map(p => Document("flow" -> p._1.toList, "time" -> Math.abs(p._2 / 1000))).toList,
+          "flowSequence" -> u._2.visitedPages.map(p => Document(
+            "flow" -> p._1.toList,
+            "time" -> Math.abs(p._2 / 1000)
+          )).toList,
           "preferences" -> u._2.preferencesProbabilities.toList,
           "pageTypes" -> u._2.pageTypeProbabilities.toList,
           "averageSessionTime" -> Math.abs(u._2.averageTime.getOrElse(0l) / 1000.0),
-          "totalPageViews" -> u._2.totalPageViews.getOrElse(0)
+          "totalPageViews" -> u._2.totalPageViews.getOrElse(0),
+          "averageTimePerPage" -> u._2.averageTimePerPage.getOrElse(0l)
         )
         collection.insertOne(document).headResult()
       }
