@@ -10,7 +10,7 @@ import scala.concurrent.Future
 
 object Boot {
 
-  val configFile = ConfigFactory.load("clickfiel")
+  val configFile = ConfigFactory.load("kk")
   val collectionName = configFile.getString("kugsha.database.collectionName")
   val profilesCollectionName = configFile.getString("kugsha.database.profilesCollectionName")
   val connString = configFile.getString("kugsha.database.connString")
