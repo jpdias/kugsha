@@ -11,7 +11,6 @@ import org.mongodb.scala.model.Aggregates._
 import org.mongodb.scala.model.Filters
 import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.{ Document => _, _ }
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -146,7 +145,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
         "pageTypes" -> pageTypesAvg.get(i).toList,
         "averageSessionTime" -> additionalFields.get(i)._1,
         "averageVisitedPages" -> additionalFields.get(i)._2,
-        "averageTimePerPage" -> ( additionalFields.get(i)._1 / additionalFields.get(i)._2 ),
+        "averageTimePerPage" -> (additionalFields.get(i)._1 / additionalFields.get(i)._2),
         "usersCount" -> usersPerCluster.get(i)
       )
 
