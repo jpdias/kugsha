@@ -15,6 +15,9 @@ import scala.collection.JavaConversions._
 import database.Helpers._
 import play.api.libs.json._
 
+import scala.collection.breakOut
+import scala.collection.generic.CanBuildFrom
+
 case class Profile(
   id:                       String,
   preferencesProbabilities: mutable.HashMap[String, Double],
@@ -23,10 +26,11 @@ case class Profile(
   var firstTime:            DateTime,
   averageTime:              Option[Long],
   totalPageViews:           Option[Int],
-  sessionInfo:              List[SessionDetail]
+  sessionInfo:              List[SessionDetail],
+  sessionResume:            Option[SessionDetail]
 )
 
-case class innerInfo(cat: String, value: Double)
+case class innerInfo(cat: Int, value: Double)
 
 case class SessionDetail(
   sessionLength:   innerInfo,
@@ -39,6 +43,16 @@ case class LogEntry(id: String, timestamp: DateTime, url: String)
 case class LogPageEntry(url: String, kind: String, category: String)
 
 class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSON: Boolean) {
+
+  def mode[T, CC[X] <: Seq[X]](coll: CC[T])(implicit o: T => Ordered[T], cbf: CanBuildFrom[Nothing, T, CC[T]]): CC[T] = {
+    val grouped = coll.groupBy(x => x).mapValues(_.size).toSeq
+    val max = grouped.map(_._2).max
+    grouped.filter(_._2 == max).map(_._1)(breakOut)
+  }
+
+  def average[T](ts: Iterable[T])(implicit num: Numeric[T]) = {
+    num.toDouble(ts.sum) / ts.size
+  }
 
   val users = mutable.HashMap[String, Profile]()
   val pages = mutable.HashMap[String, LogPageEntry]()
@@ -185,7 +199,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
               p.visitedPages += temp
             }
           case None => users += (
-            rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, None, None, List())
+            rec.id -> Profile(rec.id, mutable.HashMap(), mutable.HashMap(), ListBuffer((ListBuffer(rec.url), 0l)), rec.timestamp, None, None, List(), None)
           )
         }
       }
@@ -240,32 +254,41 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
             val meanTimePerPageDefault = configFile.getConfig("kugsha.profiles.session.meanTimePerPage")
 
             val sessionLength = if (en._1.length <= sessionLengthDefault.getDouble("short"))
-              innerInfo("short", en._1.size)
+              innerInfo(0, en._1.size)
             else if (en._1.length > sessionLengthDefault.getDouble("long"))
-              innerInfo("long", en._1.size)
+              innerInfo(2, en._1.size)
             else
-              innerInfo("medium", en._1.size)
+              innerInfo(1, en._1.size)
 
             val sessionDuration = if (en._2 <= sessionDurationDefault.getDouble("short"))
-              innerInfo("short", en._2)
+              innerInfo(0, en._2)
             else if (en._2 > sessionDurationDefault.getDouble("long"))
-              innerInfo("long", en._2)
+              innerInfo(2, en._2)
             else
-              innerInfo("medium", en._2)
+              innerInfo(1, en._2)
 
             val meanTimePerPage = if (en._2 / en._1.size <= meanTimePerPageDefault.getDouble("short"))
-              innerInfo("short", en._2 / en._1.size)
+              innerInfo(0, en._2 / en._1.size)
             else if (en._2 > meanTimePerPageDefault.getDouble("long"))
-              innerInfo("long", en._2 / en._1.size)
+              innerInfo(2, en._2 / en._1.size)
             else
-              innerInfo("medium", en._2 / en._1.size)
+              innerInfo(1, en._2 / en._1.size)
 
             SessionDetail(sessionLength, sessionDuration, meanTimePerPage)
           }
         }.toList
 
+        val sessionResume = if (sessionInformation.nonEmpty)
+          Some(SessionDetail(
+            innerInfo(average(sessionInformation.map(x => x.sessionLength.cat)).toInt, average(sessionInformation.map(x => x.sessionLength.value)).toD),
+            innerInfo(average(sessionInformation.map(x => x.sessionDuration.cat)).toInt, average(sessionInformation.map(x => x.sessionDuration.value))),
+            innerInfo(average(sessionInformation.map(x => x.meanTimePerPage.cat)).toInt, average(sessionInformation.map(x => x.meanTimePerPage.value)))
+          ))
+        else
+          None
+
         users += (
-          u._1 -> Profile(u._1, weightsProducts, weightsTypes, u._2.visitedPages, u._2.firstTime, Some(averageSessionTime), Some(allPages.size), sessionInformation)
+          u._1 -> Profile(u._1, weightsProducts, weightsTypes, u._2.visitedPages, u._2.firstTime, Some(averageSessionTime), Some(allPages.size), sessionInformation, sessionResume)
         )
       }
     }
@@ -275,7 +298,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
     users.foreach { u =>
       {
         val collection: MongoCollection[Document] = db.getCollection(configFile.getString("kugsha.database.profilesCollectionName"))
-        val document: Document = Document(
+        val document = Document(
           "_id" -> u._1,
           "flowSequence" -> u._2.visitedPages.map(p => Document(
             "flow" -> p._1.toList,
@@ -293,6 +316,14 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
             )
           )
         )
+        u._2.sessionResume match {
+          case Some(s) => document.update("sessionResume", List(
+            Document("meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0)),
+            Document("sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0)),
+            Document("sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value / 1000.0))
+          ))
+          case None =>
+        }
         collection.insertOne(document).headResult()
       }
     }
