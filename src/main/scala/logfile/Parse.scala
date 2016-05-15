@@ -261,18 +261,18 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
               innerInfo(1, en._1.size)
 
             val sessionDuration = if (en._2 <= sessionDurationDefault.getDouble("short"))
-              innerInfo(0, en._2)
+              innerInfo(0, math.abs(en._2))
             else if (en._2 > sessionDurationDefault.getDouble("long"))
-              innerInfo(2, en._2)
+              innerInfo(2, math.abs(en._2))
             else
-              innerInfo(1, en._2)
+              innerInfo(1, math.abs(en._2))
 
             val meanTimePerPage = if (en._2 / en._1.size <= meanTimePerPageDefault.getDouble("short"))
-              innerInfo(0, en._2 / en._1.size)
+              innerInfo(0, math.abs(en._2 / en._1.size))
             else if (en._2 > meanTimePerPageDefault.getDouble("long"))
-              innerInfo(2, en._2 / en._1.size)
+              innerInfo(2, math.abs(en._2 / en._1.size))
             else
-              innerInfo(1, en._2 / en._1.size)
+              innerInfo(1, math.abs(en._2 / en._1.size))
 
             SessionDetail(sessionLength, sessionDuration, meanTimePerPage)
           }
@@ -280,7 +280,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
 
         val sessionResume = if (sessionInformation.nonEmpty)
           Some(SessionDetail(
-            innerInfo(average(sessionInformation.map(x => x.sessionLength.cat)).toInt, average(sessionInformation.map(x => x.sessionLength.value)).toD),
+            innerInfo(average(sessionInformation.map(x => x.sessionLength.cat)).toInt, average(sessionInformation.map(x => x.sessionLength.value))),
             innerInfo(average(sessionInformation.map(x => x.sessionDuration.cat)).toInt, average(sessionInformation.map(x => x.sessionDuration.value))),
             innerInfo(average(sessionInformation.map(x => x.meanTimePerPage.cat)).toInt, average(sessionInformation.map(x => x.meanTimePerPage.value)))
           ))
@@ -310,9 +310,9 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
           "totalPageViews" -> u._2.totalPageViews.getOrElse(0),
           "sessionInformation" -> u._2.sessionInfo.map(
             s => List(
-              Document("meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0)),
-              Document("sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0)),
-              Document("sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value / 1000.0))
+              Document("meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0)), //time to seconds
+              Document("sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0)), //time to seconds
+              Document("sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value))
             )
           )
         )
@@ -320,7 +320,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
           case Some(s) => document.update("sessionResume", List(
             Document("meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0)),
             Document("sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0)),
-            Document("sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value / 1000.0))
+            Document("sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value))
           ))
           case None =>
         }

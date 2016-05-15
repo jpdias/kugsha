@@ -11,17 +11,19 @@ import org.mongodb.scala.model.Aggregates._
 import org.mongodb.scala.model.Filters
 import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.{ Document => _, _ }
+
 import scala.collection.JavaConversions._
-import scala.collection.mutable
+import scala.collection.{ Set, mutable }
 import scala.collection.mutable.ListBuffer
 
 case class EntryProfile(
-  id:         String,
-  avgTime:    Double,
-  visitCount: Int,
-  rawData:    Map[(String, String), Double],
-  resume:     mutable.HashMap[String, Double],
-  pageTypes:  mutable.HashMap[String, Double]
+  id:          String,
+  avgTime:     Double,
+  visitCount:  Int,
+  rawData:     Map[(String, String), Double],
+  resume:      mutable.HashMap[String, Double],
+  pageTypes:   mutable.HashMap[String, Double],
+  sessionData: SessionDetail
 )
 
 class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) {
@@ -35,7 +37,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
     val collectProfiles: Seq[EntryProfile] = db.getCollection(collectionName)
       .aggregate(List(filter(
         Filters.gt("averageSessionTime", 0.0)
-      ), sample(25000), project(include("_id", "averageSessionTime", "totalPageViews", "preferences", "pageTypes"))))
+      ), sample(25000), project(include("_id", "averageSessionTime", "totalPageViews", "preferences", "pageTypes", "sessionResume"))))
       .results().map { doc =>
         {
           val rawData: Map[(String, String), Double] = doc.get[BsonDocument]("preferences")
@@ -48,6 +50,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
             .mapValues(value => value.asDouble().getValue)
             .map(m => ("pageTypes", m._1) -> m._2)
             .toMap
+
           val profileResume = new mutable.HashMap[String, Double]()
           val pageTypesOnly = new mutable.HashMap[String, Double]()
 
@@ -69,7 +72,24 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
               }
             }
           }
-          EntryProfile(doc.get[BsonString]("_id").get.getValue, doc.get[BsonDouble]("averageSessionTime").get.getValue, doc.get[BsonInt32]("totalPageViews").get.getValue, rawData, profileResume, pageTypesOnly)
+          val sessionResume = doc.get[BsonArray]("sessionResume").get
+
+          val sessionData = SessionDetail(
+            innerInfo(
+              sessionResume.get(2).asDocument().get("sessionLength").asDocument().getInt32("level").getValue,
+              sessionResume.get(2).asDocument().get("sessionLength").asDocument().getNumber("level").doubleValue
+            ),
+            innerInfo(
+              sessionResume.get(1).asDocument().get("sessionDuration").asDocument().getInt32("level").getValue,
+              sessionResume.get(1).asDocument().get("sessionDuration").asDocument().getNumber("level").doubleValue
+            ),
+            innerInfo(
+              sessionResume.get(0).asDocument().get("meanTimePerPage").asDocument().getInt32("level").getValue,
+              sessionResume.get(0).asDocument().get("meanTimePerPage").asDocument().getNumber("level").doubleValue
+            )
+          )
+
+          EntryProfile(doc.get[BsonString]("_id").get.getValue, doc.get[BsonDouble]("averageSessionTime").get.getValue, doc.get[BsonInt32]("totalPageViews").get.getValue, rawData, profileResume, pageTypesOnly, sessionData)
         }
       }
 
@@ -79,11 +99,11 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
 
     val res: Seq[List[Double]] = addZerosOpRes.map(x => x.values.toList)
 
-    clusteringStep(res, keys, collectProfiles)
+    clusteringStepPreferences(res, keys, collectProfiles)
 
   }
 
-  def clusteringStep(res: Seq[List[Double]], keys: Set[String], profilesData: Seq[EntryProfile]) = {
+  def clusteringStepPreferences(res: Seq[List[Double]], keys: Set[String], profilesData: Seq[EntryProfile]) = {
     val conf = new SparkConf()
       .setAppName("Clustering")
       .setMaster("local[1]")
@@ -97,7 +117,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
     val numOfIterations = configFile.getInt("kugsha.profiles.maxIterations")
     val clusters = KMeans.train(parsedData, numClusters, numOfIterations)
 
-    val result = ListBuffer.fill(clusters.k)((ListBuffer[Double](), ListBuffer[Int](), mutable.HashMap[String, Double]()))
+    val result = ListBuffer.fill(clusters.k)((ListBuffer[Double](), ListBuffer[Int](), mutable.HashMap[String, Double](), mutable.HashMap[String, (Double, Double)]()))
 
     profilesData.foreach { pf =>
 
@@ -107,6 +127,13 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
       result.get(pos)._1 += pf.avgTime
       result.get(pos)._2 += pf.visitCount
       result.get(pos)._3 ++= (for ((k, v) <- pf.pageTypes) yield k -> (v + result.get(pos)._3.getOrElse(k, 0.0)))
+      result.get(pos)._4 += ("meanTimePerPage" ->
+        (result.get(pos)._4.getOrElse("meanTimePerPage", (0.0, 0.0))._1 + pf.sessionData.meanTimePerPage.cat,
+          result.get(pos)._4.getOrElse("meanTimePerPage", (0.0, 0.0))._1 + pf.sessionData.meanTimePerPage.value))
+      result.get(pos)._4 += ("sessionLength" -> (result.get(pos)._4.getOrElse("sessionLength", (0.0, 0.0))._1 + pf.sessionData.sessionLength.cat,
+        result.get(pos)._4.getOrElse("sessionLength", (0.0, 0.0))._1 + pf.sessionData.sessionLength.value))
+      result.get(pos)._4 += ("sessionDuration" -> (result.get(pos)._4.getOrElse("sessionDuration", (0.0, 0.0))._1 + pf.sessionData.sessionDuration.cat,
+        result.get(pos)._4.getOrElse("sessionDuration", (0.0, 0.0))._1 + pf.sessionData.sessionDuration.value))
     }
 
     val usersPerCluster = result.map(x => x._1.size).toList
@@ -115,18 +142,77 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
 
     val pageTypesAvg = ListBuffer.fill(clusters.k)(mutable.HashMap[String, Double]())
 
+    val sessionDataAvg: ListBuffer[mutable.HashMap[String, (Int, Double)]] = ListBuffer.fill(clusters.k)(mutable.HashMap[String, (Int, Double)]())
+
     var ind = 0
     result.foreach(x => {
       x._3.keySet.map(k => pageTypesAvg.get(ind) += k -> x._3.get(k).get / x._1.size)
+      x._4.keySet.map(k => sessionDataAvg.get(ind) += k -> ((x._4.get(k).get._1 / x._1.size).toInt, x._4.get(k).get._1 / x._1.size))
       ind += 1
     })
 
-    store(keys, clusters.clusterCenters, additionalFields, usersPerCluster, pageTypesAvg)
+    store(keys, clusters.clusterCenters, additionalFields, usersPerCluster, pageTypesAvg, sessionDataAvg)
 
     sc.stop()
   }
 
-  def store(header: Set[String], data: Array[Vector], additionalFields: List[(Double, Double)], usersPerCluster: List[Int], pageTypesAvg: ListBuffer[mutable.HashMap[String, Double]]) = {
+
+  def clusteringStepSessions(res: Seq[List[Double]], keys: Set[String], profilesData: Seq[EntryProfile]) = {
+    val conf = new SparkConf()
+      .setAppName("Clustering")
+      .setMaster("local[1]")
+      .set("spark.ui.enabled", "false")
+
+    val sc = new SparkContext(conf)
+
+    val parsedData: RDD[Vector] = sc.parallelize(profilesData.map(s => Vectors.dense(s.sessionData.sessionDuration.cat,s.sessionData.meanTimePerPage.cat,s.sessionData.sessionLength.cat))).cache()
+
+    val numClusters = configFile.getInt("kugsha.profiles.numberOfClusters")
+    val numOfIterations = configFile.getInt("kugsha.profiles.maxIterations")
+    val clusters = KMeans.train(parsedData, numClusters, numOfIterations)
+
+    val result = ListBuffer.fill(clusters.k)((ListBuffer[Double](), ListBuffer[Int](), mutable.HashMap[String, Double](), mutable.HashMap[String, (Double, Double)]()))
+
+    profilesData.foreach { pf =>
+
+      val addZerosOpRes: Map[String, Double] = keys.map(t => t -> 0.0).toMap ++ pf.resume
+      val res: List[Double] = addZerosOpRes.values.toList
+      val pos = clusters.predict(Vectors.dense(pf.sessionData.sessionDuration.cat,pf.sessionData.meanTimePerPage.cat,pf.sessionData.sessionLength.cat))
+      //TODO!
+      result.get(pos)._1 += pf.avgTime
+      result.get(pos)._2 += pf.visitCount
+      result.get(pos)._3 ++= (for ((k, v) <- pf.pageTypes) yield k -> (v + result.get(pos)._3.getOrElse(k, 0.0)))
+      result.get(pos)._4 += ("meanTimePerPage" ->
+        (result.get(pos)._4.getOrElse("meanTimePerPage", (0.0, 0.0))._1 + pf.sessionData.meanTimePerPage.cat,
+          result.get(pos)._4.getOrElse("meanTimePerPage", (0.0, 0.0))._1 + pf.sessionData.meanTimePerPage.value))
+      result.get(pos)._4 += ("sessionLength" -> (result.get(pos)._4.getOrElse("sessionLength", (0.0, 0.0))._1 + pf.sessionData.sessionLength.cat,
+        result.get(pos)._4.getOrElse("sessionLength", (0.0, 0.0))._1 + pf.sessionData.sessionLength.value))
+      result.get(pos)._4 += ("sessionDuration" -> (result.get(pos)._4.getOrElse("sessionDuration", (0.0, 0.0))._1 + pf.sessionData.sessionDuration.cat,
+        result.get(pos)._4.getOrElse("sessionDuration", (0.0, 0.0))._1 + pf.sessionData.sessionDuration.value))
+    }
+
+    val usersPerCluster = result.map(x => x._1.size).toList
+
+    val additionalFields: List[(Double, Double)] = result.map(x => (x._1.sum / x._1.length, (x._2.sum + 0.0) / x._2.length)).toList
+
+    val pageTypesAvg = ListBuffer.fill(clusters.k)(mutable.HashMap[String, Double]())
+
+    val sessionDataAvg: ListBuffer[mutable.HashMap[String, (Int, Double)]] = ListBuffer.fill(clusters.k)(mutable.HashMap[String, (Int, Double)]())
+
+    var ind = 0
+    result.foreach(x => {
+      x._3.keySet.map(k => pageTypesAvg.get(ind) += k -> x._3.get(k).get / x._1.size)
+      x._4.keySet.map(k => sessionDataAvg.get(ind) += k -> ((x._4.get(k).get._1 / x._1.size).toInt, x._4.get(k).get._1 / x._1.size))
+      ind += 1
+    })
+
+    store(keys, clusters.clusterCenters, additionalFields, usersPerCluster, pageTypesAvg, sessionDataAvg)
+
+    sc.stop()
+  }
+
+  def store(header: Set[String], data: Array[Vector], additionalFields: List[(Double, Double)], usersPerCluster: List[Int],
+            pageTypesAvg: ListBuffer[mutable.HashMap[String, Double]], sessionDataAvg: ListBuffer[mutable.HashMap[String, (Int, Double)]]) = {
 
     val collectionPrototypes = configFile.getString("kugsha.profiles.collectionPrototypes")
 
@@ -140,19 +226,28 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
         preferences += keys.get(x) -> currentArray.get(x)
       }
 
+      val sessionData = sessionDataAvg.get(i).keySet.map(
+        entry => Document(entry ->
+          Document(
+            "level" -> sessionDataAvg.get(i).getOrElse(entry, (0, 0.0))._1,
+            "value" -> sessionDataAvg.get(i).getOrElse(entry, (0, 0.0))._2
+          ))
+      )
+
       val document: Document = Document(
         "preferences" -> preferences.toList,
         "pageTypes" -> pageTypesAvg.get(i).toList,
         "averageSessionTime" -> additionalFields.get(i)._1,
         "averageVisitedPages" -> additionalFields.get(i)._2,
         "averageTimePerPage" -> (additionalFields.get(i)._1 / additionalFields.get(i)._2),
-        "usersCount" -> usersPerCluster.get(i)
+        "usersCount" -> usersPerCluster.get(i),
+        "sessionResume" -> sessionData.toList
       )
 
       db.getCollection(collectionPrototypes).insertOne(document).headResult()
+
       i += 1
     }
-
   }
 
 }

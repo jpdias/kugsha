@@ -1,6 +1,6 @@
 import com.typesafe.config.ConfigFactory
 import database.Helpers._
-import logfile.Parse
+import logfile.Clustering
 import org.bson.BsonString
 import org.mongodb.scala._
 
@@ -67,14 +67,14 @@ object Boot {
 */
     println("3 - Logger parse and session split")
     //Log Parse and Session splitting
-    val parse = new Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
-    parse.sessions(parse.ParseLog())
-    parse.saveProfiles(parse.users)
+    //val parse = new Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
+    // parse.sessions(parse.ParseLog())
+    //parse.saveProfiles(parse.users)
 
     println("4 - Clustering")
     //Clutering Profiles
-    //val newClustering = new Clustering(configFile, db, profilesCollectionName)
-    //newClustering.loadData
+    val newClustering = new Clustering(configFile, db, profilesCollectionName)
+    newClustering.loadData
 
     println("Finished.")
 
