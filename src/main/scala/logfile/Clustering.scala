@@ -72,20 +72,20 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
               }
             }
           }
-          val sessionResume = doc.get[BsonArray]("sessionResume").get
+          val sessionResume = doc.get[BsonDocument]("sessionResume").get
 
           val sessionData = SessionDetail(
             innerInfo(
-              sessionResume.get(2).asDocument().get("sessionLength").asDocument().getInt32("level").getValue,
-              sessionResume.get(2).asDocument().get("sessionLength").asDocument().getNumber("level").doubleValue
+              sessionResume.get("sessionLength").asDocument().getInt32("level").getValue,
+              sessionResume.get("sessionLength").asDocument().getNumber("level").doubleValue
             ),
             innerInfo(
-              sessionResume.get(1).asDocument().get("sessionDuration").asDocument().getInt32("level").getValue,
-              sessionResume.get(1).asDocument().get("sessionDuration").asDocument().getNumber("level").doubleValue
+              sessionResume.get("sessionDuration").asDocument().getInt32("level").getValue,
+              sessionResume.get("sessionDuration").asDocument().getNumber("level").doubleValue
             ),
             innerInfo(
-              sessionResume.get(0).asDocument().get("meanTimePerPage").asDocument().getInt32("level").getValue,
-              sessionResume.get(0).asDocument().get("meanTimePerPage").asDocument().getNumber("level").doubleValue
+              sessionResume.get("meanTimePerPage").asDocument().getInt32("level").getValue,
+              sessionResume.get("meanTimePerPage").asDocument().getNumber("level").doubleValue
             )
           )
 
@@ -211,7 +211,7 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
 
     var i = 0
     sessionClusters.foreach { arr =>
-      if (usersPerCluster.get(i) > 0) {
+      if (usersPerCluster.get(i) > configFile.getInt("kugsha.profiles.usersPerClusterMinThreshold")) {
         val sessions = mutable.HashMap[String, Int]()
         println(arr.toArray.toList)
         val currentArray = arr.toArray.toList
@@ -250,33 +250,35 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
 
     var i = 0
     data.foreach { arr =>
-      val preferences = mutable.HashMap[String, Double]()
-      val currentArray = arr.toArray.toList
-      for (x <- 1 until keys.size) {
-        preferences += keys.get(x) -> currentArray.get(x)
+      if (usersPerCluster.get(i) > configFile.getInt("kugsha.profiles.usersPerClusterMinThreshold")) {
+        val preferences = mutable.HashMap[String, Double]()
+        val currentArray = arr.toArray.toList
+        for (x <- 1 until keys.size) {
+          preferences += keys.get(x) -> currentArray.get(x)
+        }
+
+        val sessionData = sessionDataAvg.get(i).keySet.map(
+          entry => Document(entry ->
+            Document(
+              "level" -> sessionDataAvg.get(i).getOrElse(entry, (0, 0.0))._1,
+              "value" -> sessionDataAvg.get(i).getOrElse(entry, (0, 0.0))._2
+            ))
+        )
+
+        val document: Document = Document(
+          "preferences" -> preferences.toList,
+          "pageTypes" -> pageTypesAvg.get(i).toList,
+          "averageSessionTime" -> additionalFields.get(i)._1,
+          "averageVisitedPages" -> additionalFields.get(i)._2,
+          "averageTimePerPage" -> (additionalFields.get(i)._1 / additionalFields.get(i)._2),
+          "usersCount" -> usersPerCluster.get(i),
+          "sessionResume" -> sessionData.toList
+        )
+
+        db.getCollection(collectionPrototypes).insertOne(document).headResult()
+
+        i += 1
       }
-
-      val sessionData = sessionDataAvg.get(i).keySet.map(
-        entry => Document(entry ->
-          Document(
-            "level" -> sessionDataAvg.get(i).getOrElse(entry, (0, 0.0))._1,
-            "value" -> sessionDataAvg.get(i).getOrElse(entry, (0, 0.0))._2
-          ))
-      )
-
-      val document: Document = Document(
-        "preferences" -> preferences.toList,
-        "pageTypes" -> pageTypesAvg.get(i).toList,
-        "averageSessionTime" -> additionalFields.get(i)._1,
-        "averageVisitedPages" -> additionalFields.get(i)._2,
-        "averageTimePerPage" -> (additionalFields.get(i)._1 / additionalFields.get(i)._2),
-        "usersCount" -> usersPerCluster.get(i),
-        "sessionResume" -> sessionData.toList
-      )
-
-      db.getCollection(collectionPrototypes).insertOne(document).headResult()
-
-      i += 1
     }
   }
 

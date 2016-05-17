@@ -13,7 +13,8 @@ import scala.io.Source
 import scala.collection.mutable
 import collection.JavaConversions._
 
-class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: List[String], ignoreUrlWithList: List[String], db: MongoDatabase, collectionName: String, encoding: String, ignoreParams: Seq[String]) {
+class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: List[String], ignoreUrlWithList: List[String],
+              db: MongoDatabase, collectionName: String, encoding: String, ignoreParams: Seq[String]) {
 
   var visited = mutable.Set[String]()
   val frontier = new mutable.Queue[String]
@@ -62,7 +63,13 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
   def writePageToDb(pageCount: Int, url: String, pageContent: String, outboundLinks: List[String]) = Future {
     val collection: MongoCollection[Document] = db.getCollection(collectionName)
 
-    val document: Document = Document("_id" -> pageCount, "url" -> toRelative(url), "content" -> pageContent, "outbound" -> outboundLinks.map(toRelative).distinct)
+    val document: Document = Document(
+      "_id" -> pageCount,
+      "url" -> toRelative(url),
+      "content" -> pageContent,
+      "outbound" -> outboundLinks.map(entry => toRelative(entry)).distinct
+    )
+
     val insertObservable: Observable[Completed] = collection.insertOne(document)
 
     insertObservable.subscribe(new Observer[Completed] {
@@ -75,7 +82,9 @@ class Crawler(baseUrl: String, domain: String, startPage: String, ignoreList: Li
   }
 
   def toRelative(url: String): String = {
+
     val relative = url.replace(baseUrl, "")
+
     if (relative.isEmpty || relative == "/")
       "/"
     else

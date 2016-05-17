@@ -214,8 +214,6 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
 
         val averageSessionTime = u._2.visitedPages.foldLeft(0l)((r, p) => r + (p._2 / u._2.visitedPages.size))
 
-        val averageTimePerPage = averageSessionTime / u._2.visitedPages.map(x => x._1.length).sum
-
         allPages.foreach { url =>
           {
             val info = if (isJSON) {
@@ -309,18 +307,18 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
           "averageSessionTime" -> Math.abs(u._2.averageTime.getOrElse(0l) / 1000.0),
           "totalPageViews" -> u._2.totalPageViews.getOrElse(0),
           "sessionInformation" -> u._2.sessionInfo.map(
-            s => List(
-              Document("meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0)), //time to seconds
-              Document("sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0)), //time to seconds
-              Document("sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value))
+            s => Document(
+              "meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0), //time to seconds
+              "sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0), //time to seconds
+              "sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value)
             )
           )
         )
         u._2.sessionResume match {
-          case Some(s) => document.update("sessionResume", List(
-            Document("meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0)),
-            Document("sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0)),
-            Document("sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value))
+          case Some(s) => document.update("sessionResume", Document(
+            "meanTimePerPage" -> Document("level" -> s.meanTimePerPage.cat, "value" -> s.meanTimePerPage.value / 1000.0),
+            "sessionDuration" -> Document("level" -> s.sessionDuration.cat, "value" -> s.sessionDuration.value / 1000.0),
+            "sessionLength" -> Document("level" -> s.sessionLength.cat, "value" -> s.sessionLength.value)
           ))
           case None =>
         }

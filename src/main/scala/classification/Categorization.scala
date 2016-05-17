@@ -46,6 +46,7 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
     val categories = doc.select(configFile.getString("kugsha.classification.selectors.categoriesArray"))
     val productPage = doc.select(configFile.getString("kugsha.classification.selectors.productPage"))
     val productList = doc.select(configFile.getString("kugsha.classification.selectors.productListPage"))
+    val cartPage = doc.select(configFile.getString("kugsha.classification.selectors.cartPage"))
 
     val price = doc.select(configFile.getString("kugsha.classification.selectors.price"))
     val prodName = doc.select(configFile.getString("kugsha.classification.selectors.productName"))
@@ -66,31 +67,33 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
     }
 
     val urlRegexExists = configFile.hasPath("kugsha.classification.urlRegex")
-    if (urlRegexExists) {
-      if (!productPage.isEmpty && url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
-        updateAll ++= Document("type" -> "product")
-        updateAll ++= Document("price" -> price.text)
-        updateAll ++= Document("productName" -> prodName.text)
-      } else if (!productList.isEmpty && url.toString.contains(configFile.getString("kugsha.classification.urlRegex.productListPage"))) {
-        updateAll ++= Document("type" -> "list")
-      } else if (!price.isEmpty) {
+    /*if (urlRegexExists) {
+    if (!productPage.isEmpty && url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
+       updateAll ++= Document("type" -> "product")
+       updateAll ++= Document("price" -> price.text)
+       updateAll ++= Document("productName" -> prodName.text)
+     } else if (!productList.isEmpty && url.toString.contains(configFile.getString("kugsha.classification.urlRegex.productListPage"))) {
+       updateAll ++= Document("type" -> "list")
+     } else if (!price.isEmpty) {
+       updateAll ++= Document("cart" -> true)
+     } else {
+       updateAll ++= Document("type" -> "generic")
+     }
+   } else {*/
+    if (productPage.nonEmpty || url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
+      updateAll ++= Document("type" -> "product")
+      updateAll ++= Document("price" -> price.text)
+      updateAll ++= Document("productName" -> prodName.text)
+      if (!price.isEmpty)
         updateAll ++= Document("cart" -> true)
-      } else {
-        updateAll ++: Document("type" -> "generic")
-      }
+    } else if (productList.nonEmpty) {
+      updateAll ++= Document("type" -> "list")
+    } else if (cartPage.nonEmpty || url.toString.contains(configFile.getString("kugsha.classification.urlRegex.cartPage"))) {
+      updateAll ++= Document("type" -> "cart")
     } else {
-      if (!productPage.isEmpty) {
-        updateAll ++= Document("type" -> "product")
-        updateAll ++= Document("price" -> price.text)
-        updateAll ++= Document("productName" -> prodName.text)
-        if (!price.isEmpty)
-          updateAll ++= Document("cart" -> true)
-      } else if (!productList.isEmpty) {
-        updateAll ++= Document("type" -> "list")
-      } else {
-        updateAll ++: Document("type" -> "generic")
-      }
+      updateAll ++= Document("type" -> "generic")
     }
+
     val dynamicExists = !isDynamic.isEmpty
 
     updateAll ++= Document("isDynamic" -> dynamicExists)

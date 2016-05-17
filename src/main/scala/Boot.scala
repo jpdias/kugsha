@@ -1,6 +1,5 @@
 import com.typesafe.config.ConfigFactory
 import database.Helpers._
-import logfile.Clustering
 import org.bson.BsonString
 import org.mongodb.scala._
 
@@ -49,12 +48,12 @@ object Boot {
 
     println("1 - Crawler")
     //Crawler Step
-    //val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
-    //crawler.start
+    // val crawler = new Crawler(protocol + domain, domain, startPage, ignoreList, ignoreUrlWithList, db, collectionName, encoding, ignoreParams)
+    // crawler.start
 
     println("2 - Page info extract")
     //Page information extraction + category tree
-    //val categorization = new Categorization(db, collectionName, configFile)
+    //val categorization = new classification.Categorization(db, collectionName, configFile)
     //categorization.classifyTask
 
     /*val graph = new MultiGraph("")
@@ -67,14 +66,14 @@ object Boot {
 */
     println("3 - Logger parse and session split")
     //Log Parse and Session splitting
-    //val parse = new Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
-    // parse.sessions(parse.ParseLog())
-    //parse.saveProfiles(parse.users)
+    val parse = new logfile.Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
+    parse.sessions(parse.ParseLog())
+    parse.saveProfiles(parse.users)
 
     println("4 - Clustering")
     //Clutering Profiles
-    val newClustering = new Clustering(configFile, db, profilesCollectionName)
-    newClustering.loadData
+    //val newClustering = new logfile.Clustering(configFile, db, profilesCollectionName)
+    //newClustering.loadData
 
     println("Finished.")
 
