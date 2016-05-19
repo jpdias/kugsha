@@ -343,14 +343,12 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
         for (x <- keys.indices) {
           sessions += keys.get(x) -> currentArray.get(x).toInt
         }
-
         val prefsData = prefsDataAvg
           .get(i)
           .keySet
           .map(
               entry => entry -> prefsDataAvg.get(i).getOrElse(entry, 0.0)
           )
-
         val document: Document = Document(
             "sessionData" -> sessions.toList,
             "pageTypes" -> pageTypesAvg.get(i).toList,
@@ -362,12 +360,9 @@ class Clustering(configFile: Config, db: MongoDatabase, collectionName: String) 
             "usersCount" -> usersPerCluster.get(i),
             "preferences" -> prefsData.toList
         )
-
         db.getCollection(collectionPrototypes).insertOne(document).headResult()
-        i += 1
-      } else {
-        i += 1
       }
+      i += 1
     }
   }
 
