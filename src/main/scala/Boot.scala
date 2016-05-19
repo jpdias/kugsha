@@ -9,9 +9,10 @@ import scala.concurrent.Future
 
 object Boot {
 
-  val configFile = ConfigFactory.load("kk")
+  val configFile = ConfigFactory.load("clickfiel")
   val collectionName = configFile.getString("kugsha.database.collectionName")
-  val profilesCollectionName = configFile.getString("kugsha.database.profilesCollectionName")
+  val profilesCollectionName =
+    configFile.getString("kugsha.database.profilesCollectionName")
   val connString = configFile.getString("kugsha.database.connString")
   val dbname = configFile.getString("kugsha.database.dbname")
 
@@ -19,21 +20,30 @@ object Boot {
   val domain = configFile.getString("kugsha.crawler.domain")
   val startPage = configFile.getString("kugsha.crawler.startPage")
   val ignoreList = configFile.getStringList("kugsha.crawler.ignoreList").toList
-  val ignoreUrlWithList = configFile.getStringList("kugsha.crawler.ignoreUrlWithList").toList
+  val ignoreUrlWithList =
+    configFile.getStringList("kugsha.crawler.ignoreUrlWithList").toList
   val encoding = configFile.getString("kugsha.crawler.encoding")
-  val ignoreParams = configFile.getStringList("kugsha.crawler.ignoreParams").toList
+  val ignoreParams =
+    configFile.getStringList("kugsha.crawler.ignoreParams").toList
 
   import org.graphstream.graph.implementations._
 
   def draw(graph: MultiGraph, db: MongoDatabase): Future[MultiGraph] = Future {
     db.getCollection(collectionName).find().results().foreach { page =>
       {
-        page.get("outbound").get.asArray().foreach(x => {
-          val ori = page.getOrElse("url", "").asInstanceOf[BsonString].getValue
-          val dest = x.asInstanceOf[BsonString].getValue
-          println(ori + " -> " + dest)
-          graph.addEdge(ori + dest, ori, dest, true).asInstanceOf[AbstractEdge]
-        })
+        page
+          .get("outbound")
+          .get
+          .asArray()
+          .foreach(x => {
+            val ori =
+              page.getOrElse("url", "").asInstanceOf[BsonString].getValue
+            val dest = x.asInstanceOf[BsonString].getValue
+            println(ori + " -> " + dest)
+            graph
+              .addEdge(ori + dest, ori, dest, true)
+              .asInstanceOf[AbstractEdge]
+          })
       }
     }
     for (n <- graph) {
@@ -53,8 +63,9 @@ object Boot {
 
     println("2 - Page info extract")
     //Page information extraction + category tree
-    //val categorization = new classification.Categorization(db, collectionName, configFile)
-    //categorization.classifyTask
+    val categorization =
+      new classification.Categorization(db, collectionName, configFile)
+    categorization.classifyTask
 
     /*val graph = new MultiGraph("")
     graph.addAttribute("ui.label", "text-mode:normal")
@@ -63,21 +74,20 @@ object Boot {
     graph.addAttribute("ui.stylesheet", "node {fill-color: red; size-mode: dyn-size;} edge {fill-color:grey;}")
 
     Await.result(draw(graph, db), Duration(20, TimeUnit.SECONDS)).display()
-*/
+     */
     println("3 - Logger parse and session split")
     //Log Parse and Session splitting
-    val parse = new logfile.Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
-    parse.sessions(parse.ParseLog())
-    parse.saveProfiles(parse.users)
+    //val parse = new logfile.Parse(configFile, db, collectionName, configFile.getBoolean("kugsha.profiles.isJson"))
+    //parse.sessions(parse.ParseLog())
+    //parse.saveProfiles(parse.users)
 
     println("4 - Clustering")
     //Clutering Profiles
     //val newClustering = new logfile.Clustering(configFile, db, profilesCollectionName)
-    //newClustering.loadData
+    //newClustering.loadData(clusterSessions = true,clusterPreferences = true)
 
     println("Finished.")
 
     client.close
   }
-
 }

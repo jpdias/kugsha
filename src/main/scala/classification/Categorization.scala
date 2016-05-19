@@ -12,18 +12,22 @@ import org.mongodb.scala.model.Filters._
 
 import scala.collection.JavaConversions._
 import scala.collection._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 
-class Categorization(db: MongoDatabase, collectionName: String, configFile: Config) {
+class Categorization(
+    db: MongoDatabase, collectionName: String, configFile: Config) {
 
-  private val categoryTree = mutable.HashMap[List[String], mutable.Set[String]]()
+  private val categoryTree =
+    mutable.HashMap[List[String], mutable.Set[String]]()
 
   def classifyTask() = {
     var count = 0
     val total = db.getCollection(collectionName).count().headResult()
     while (total > count) {
-      val queryRes = db.getCollection(collectionName).find(Document("_id" -> count)).results().headOption
+      val queryRes = db
+        .getCollection(collectionName)
+        .find(Document("_id" -> count))
+        .results()
+        .headOption
       queryRes match {
         case Some(p) => findAndSetCategory(p)
         case _ => println("Not Found")
@@ -33,40 +37,57 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
         println(count)
     }
 
-    val tree = categoryTree.keySet.map(k => Document("parent" -> k, "children" -> categoryTree.get(k).get.toList))
-    val categoryTreeCollection = configFile.getString("kugsha.classification.categories.collectionName")
-    tree.map(db.getCollection(categoryTreeCollection).insertOne(_).headResult())
+    val tree = categoryTree.keySet.map(k =>
+          Document(
+              "parent" -> k, "children" -> categoryTree.get(k).get.toList))
+    val categoryTreeCollection =
+      configFile.getString("kugsha.classification.categories.collectionName")
+    tree.map(
+        db.getCollection(categoryTreeCollection).insertOne(_).headResult())
   }
 
-  def findAndSetCategory(page: Document) = Future {
+  def findAndSetCategory(page: Document) = {
 
     val doc = Jsoup.parse(page.get("content").get.toString)
     val url: Uri = parse(page.get[BsonString]("url").get.getValue)
 
-    val categories = doc.select(configFile.getString("kugsha.classification.selectors.categoriesArray"))
-    val productPage = doc.select(configFile.getString("kugsha.classification.selectors.productPage"))
-    val productList = doc.select(configFile.getString("kugsha.classification.selectors.productListPage"))
-    val cartPage = doc.select(configFile.getString("kugsha.classification.selectors.cartPage"))
+    val categories = doc.select(configFile.getString(
+            "kugsha.classification.selectors.categoriesArray"))
+    val productPage = doc.select(
+        configFile.getString("kugsha.classification.selectors.productPage"))
+    val productList = doc.select(configFile.getString(
+            "kugsha.classification.selectors.productListPage"))
+    val cartPage = try {
+      doc.select(
+          configFile.getString("kugsha.classification.selectors.cartPage"))
+    } catch { case e: Throwable => "" }
 
-    val price = doc.select(configFile.getString("kugsha.classification.selectors.price"))
-    val prodName = doc.select(configFile.getString("kugsha.classification.selectors.productName"))
-    val isDynamic = doc.select(configFile.getString("kugsha.classification.selectors.dynamicPart"))
+    val price =
+      doc.select(configFile.getString("kugsha.classification.selectors.price"))
+    val prodName = doc.select(
+        configFile.getString("kugsha.classification.selectors.productName"))
+    val isDynamic = doc.select(
+        configFile.getString("kugsha.classification.selectors.dynamicPart"))
 
     var updateAll = Document()
 
     if (!categories.isEmpty) {
       val catList = categories.map(cat => cat.text).toList
 
-      val categoryDepth = configFile.getInt("kugsha.classification.categories.categoryDepth")
+      val categoryDepth =
+        configFile.getInt("kugsha.classification.categories.categoryDepth")
       //create category tree with predefined category deepness
       categoryTree.get(catList.take(categoryDepth)) match {
         case Some(k) => k ++= catList.drop(categoryDepth)
-        case None => categoryTree += catList.take(categoryDepth) -> catList.drop(categoryDepth).to[mutable.Set]
+        case None =>
+          categoryTree += catList.take(categoryDepth) -> catList
+            .drop(categoryDepth)
+            .to[mutable.Set]
       }
       updateAll ++= Document("category" -> catList)
     }
 
-    val urlRegexExists = configFile.hasPath("kugsha.classification.urlRegex")
+    //val urlRegexExists = configFile.hasPath("kugsha.classification.urlRegex")
     /*if (urlRegexExists) {
     if (!productPage.isEmpty && url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
        updateAll ++= Document("type" -> "product")
@@ -80,7 +101,8 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
        updateAll ++= Document("type" -> "generic")
      }
    } else {*/
-    if (productPage.nonEmpty || url.toString.matches(configFile.getString("kugsha.classification.urlRegex.productPage"))) {
+    if (productPage.nonEmpty || url.toString.matches(configFile.getString(
+                "kugsha.classification.urlRegex.productPage"))) {
       updateAll ++= Document("type" -> "product")
       updateAll ++= Document("price" -> price.text)
       updateAll ++= Document("productName" -> prodName.text)
@@ -88,7 +110,8 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
         updateAll ++= Document("cart" -> true)
     } else if (productList.nonEmpty) {
       updateAll ++= Document("type" -> "list")
-    } else if (cartPage.nonEmpty || url.toString.contains(configFile.getString("kugsha.classification.urlRegex.cartPage"))) {
+    } else if (cartPage.toString.nonEmpty || url.toString.contains(configFile
+                     .getString("kugsha.classification.urlRegex.cartPage"))) {
       updateAll ++= Document("type" -> "cart")
     } else {
       updateAll ++= Document("type" -> "generic")
@@ -106,6 +129,9 @@ class Categorization(db: MongoDatabase, collectionName: String, configFile: Conf
       updateAll ++= Document("dynamicCount" -> dynamicCount)
     }
 
-    db.getCollection(collectionName).updateOne(equal("_id", page.get("_id").get), Document("$set" -> updateAll)).headResult()
+    db.getCollection(collectionName)
+      .updateOne(
+          equal("_id", page.get("_id").get), Document("$set" -> updateAll))
+      .headResult()
   }
 }

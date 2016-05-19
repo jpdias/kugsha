@@ -73,6 +73,7 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
     val ignoreList = configFile.getStringList("kugsha.profiles.logfile.ignoreList").toList
     val logPath = configFile.getString("kugsha.profiles.path")
     val dateFormat = configFile.getString("kugsha.profiles.logfile.dateFormat")
+    val baseUrl = configFile.getString("kugsha.crawler.protocol") + configFile.getString("kugsha.crawler.domain")
 
     val lines = Source.fromFile(logPath).getLines.toList
 
@@ -82,13 +83,13 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
       if (!ignoreList.exists(lineSplited.get(urlPosition).contains(_))) {
         val allUrl: Uri = lineSplited.get(urlPosition)
         val canon: Uri = allUrl.removeAllParams()
-        Some(
+        Some {
           LogEntry(
             lineSplited.get(userIdPosition),
             DateTimeFormat.forPattern(dateFormat).parseDateTime(lineSplited.get(timestampPosition)),
-            canon.toString.stripSuffix("/")
+            canon.toString.stripSuffix("/").replace(baseUrl, "")
           )
-        )
+        }
       } else None
     }
   }
@@ -102,6 +103,8 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
     val list = configFile.getStringList("kugsha.profiles.jsonfile.pageMap.list")
     val cart = configFile.getStringList("kugsha.profiles.jsonfile.pageMap.cart")
     val generic = configFile.getStringList("kugsha.profiles.jsonfile.pageMap.generic")
+
+    val baseUrl = configFile.getString("kugsha.crawler.protocol") + configFile.getString("kugsha.crawler.domain")
 
     val res = mutable.ListBuffer[LogEntry]()
 
@@ -138,8 +141,9 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
           val cate = if (cat.isDefined && cat.get.isEmpty) { Some("notDefined") } else cat
 
           if (uid.isDefined && timestamp.isDefined) {
-            pages += (url.toString -> LogPageEntry(url.toString, kind, cate.getOrElse("notDefined")))
-            res += LogEntry(uid.get, DateTimeFormat.forPattern(dateFormat).parseDateTime(timestamp.get), url.toString)
+            val urlToSave = url.toString.replace(baseUrl, "")
+            pages += (urlToSave -> LogPageEntry(urlToSave, kind, cate.getOrElse("notDefined")))
+            res += LogEntry(uid.get, DateTimeFormat.forPattern(dateFormat).parseDateTime(timestamp.get), urlToSave)
           }
         }
       } else if (eventType.isDefined && eventType.get.equals("productClickPaid")) {
@@ -278,9 +282,9 @@ class Parse(configFile: Config, db: MongoDatabase, collectionName: String, isJSO
 
         val sessionResume = if (sessionInformation.nonEmpty)
           Some(SessionDetail(
-            innerInfo(average(sessionInformation.map(x => x.sessionLength.cat)).toInt, average(sessionInformation.map(x => x.sessionLength.value))),
-            innerInfo(average(sessionInformation.map(x => x.sessionDuration.cat)).toInt, average(sessionInformation.map(x => x.sessionDuration.value))),
-            innerInfo(average(sessionInformation.map(x => x.meanTimePerPage.cat)).toInt, average(sessionInformation.map(x => x.meanTimePerPage.value)))
+            innerInfo(average(mode(sessionInformation.map(x => x.sessionLength.cat))).toInt, average(sessionInformation.map(x => x.sessionLength.value))),
+            innerInfo(average(mode(sessionInformation.map(x => x.sessionDuration.cat))).toInt, average(sessionInformation.map(x => x.sessionDuration.value))),
+            innerInfo(average(mode(sessionInformation.map(x => x.meanTimePerPage.cat))).toInt, average(sessionInformation.map(x => x.meanTimePerPage.value)))
           ))
         else
           None
