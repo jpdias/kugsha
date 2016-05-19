@@ -9,7 +9,7 @@ import scala.concurrent.Future
 
 object Boot {
 
-  val configFile = ConfigFactory.load("clickfiel")
+  val configFile = ConfigFactory.load("kk")
   val collectionName = configFile.getString("kugsha.database.collectionName")
   val profilesCollectionName =
     configFile.getString("kugsha.database.profilesCollectionName")
@@ -63,9 +63,9 @@ object Boot {
 
     println("2 - Page info extract")
     //Page information extraction + category tree
-    val categorization =
-      new classification.Categorization(db, collectionName, configFile)
-    categorization.classifyTask
+    //val categorization =
+    //  new classification.Categorization(db, collectionName, configFile)
+    // categorization.classifyTask
 
     /*val graph = new MultiGraph("")
     graph.addAttribute("ui.label", "text-mode:normal")
@@ -83,8 +83,8 @@ object Boot {
 
     println("4 - Clustering")
     //Clutering Profiles
-    //val newClustering = new logfile.Clustering(configFile, db, profilesCollectionName)
-    //newClustering.loadData(clusterSessions = true,clusterPreferences = true)
+    val newClustering = new logfile.Clustering(configFile, db, profilesCollectionName)
+    newClustering.loadData(clusterSessions = true, clusterPreferences = true)
 
     println("Finished.")
 

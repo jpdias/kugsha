@@ -14,7 +14,8 @@ import scala.collection.JavaConversions._
 import scala.collection._
 
 class Categorization(
-    db: MongoDatabase, collectionName: String, configFile: Config) {
+    db: MongoDatabase, collectionName: String, configFile: Config
+) {
 
   private val categoryTree =
     mutable.HashMap[List[String], mutable.Set[String]]()
@@ -38,12 +39,14 @@ class Categorization(
     }
 
     val tree = categoryTree.keySet.map(k =>
-          Document(
-              "parent" -> k, "children" -> categoryTree.get(k).get.toList))
+      Document(
+        "parent" -> k, "children" -> categoryTree.get(k).get.toList
+      ))
     val categoryTreeCollection =
       configFile.getString("kugsha.classification.categories.collectionName")
     tree.map(
-        db.getCollection(categoryTreeCollection).insertOne(_).headResult())
+      db.getCollection(categoryTreeCollection).insertOne(_).headResult()
+    )
   }
 
   def findAndSetCategory(page: Document) = {
@@ -52,22 +55,28 @@ class Categorization(
     val url: Uri = parse(page.get[BsonString]("url").get.getValue)
 
     val categories = doc.select(configFile.getString(
-            "kugsha.classification.selectors.categoriesArray"))
+      "kugsha.classification.selectors.categoriesArray"
+    ))
     val productPage = doc.select(
-        configFile.getString("kugsha.classification.selectors.productPage"))
+      configFile.getString("kugsha.classification.selectors.productPage")
+    )
     val productList = doc.select(configFile.getString(
-            "kugsha.classification.selectors.productListPage"))
+      "kugsha.classification.selectors.productListPage"
+    ))
     val cartPage = try {
       doc.select(
-          configFile.getString("kugsha.classification.selectors.cartPage"))
+        configFile.getString("kugsha.classification.selectors.cartPage")
+      )
     } catch { case e: Throwable => "" }
 
     val price =
       doc.select(configFile.getString("kugsha.classification.selectors.price"))
     val prodName = doc.select(
-        configFile.getString("kugsha.classification.selectors.productName"))
+      configFile.getString("kugsha.classification.selectors.productName")
+    )
     val isDynamic = doc.select(
-        configFile.getString("kugsha.classification.selectors.dynamicPart"))
+      configFile.getString("kugsha.classification.selectors.dynamicPart")
+    )
 
     var updateAll = Document()
 
@@ -102,7 +111,8 @@ class Categorization(
      }
    } else {*/
     if (productPage.nonEmpty || url.toString.matches(configFile.getString(
-                "kugsha.classification.urlRegex.productPage"))) {
+      "kugsha.classification.urlRegex.productPage"
+    ))) {
       updateAll ++= Document("type" -> "product")
       updateAll ++= Document("price" -> price.text)
       updateAll ++= Document("productName" -> prodName.text)
@@ -111,7 +121,7 @@ class Categorization(
     } else if (productList.nonEmpty) {
       updateAll ++= Document("type" -> "list")
     } else if (cartPage.toString.nonEmpty || url.toString.contains(configFile
-                     .getString("kugsha.classification.urlRegex.cartPage"))) {
+      .getString("kugsha.classification.urlRegex.cartPage"))) {
       updateAll ++= Document("type" -> "cart")
     } else {
       updateAll ++= Document("type" -> "generic")
@@ -131,7 +141,8 @@ class Categorization(
 
     db.getCollection(collectionName)
       .updateOne(
-          equal("_id", page.get("_id").get), Document("$set" -> updateAll))
+        equal("_id", page.get("_id").get), Document("$set" -> updateAll)
+      )
       .headResult()
   }
 }

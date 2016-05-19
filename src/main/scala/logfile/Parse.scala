@@ -3,7 +3,7 @@ package logfile
 import com.netaporter.uri.Uri
 import com.typesafe.config.Config
 import com.netaporter.uri.dsl._
-import org.bson.{BsonArray, BsonString}
+import org.bson.{ BsonArray, BsonString }
 import org.joda.time._
 import org.joda.time.format.DateTimeFormat
 import org.mongodb.scala._
@@ -19,37 +19,41 @@ import scala.collection.breakOut
 import scala.collection.generic.CanBuildFrom
 
 case class Profile(
-    id: String,
-    preferencesProbabilities: mutable.HashMap[String, Double],
-    pageTypeProbabilities: mutable.HashMap[String, Double],
-    visitedPages: mutable.ListBuffer[(mutable.ListBuffer[String], Long)],
-    var firstTime: DateTime,
-    averageTime: Option[Long],
-    totalPageViews: Option[Int],
-    sessionInfo: List[SessionDetail],
-    sessionResume: Option[SessionDetail]
+  id:                       String,
+  preferencesProbabilities: mutable.HashMap[String, Double],
+  pageTypeProbabilities:    mutable.HashMap[String, Double],
+  visitedPages:             mutable.ListBuffer[(mutable.ListBuffer[String], Long)],
+  var firstTime:            DateTime,
+  averageTime:              Option[Long],
+  totalPageViews:           Option[Int],
+  sessionInfo:              List[SessionDetail],
+  sessionResume:            Option[SessionDetail]
 )
 
 case class innerInfo(cat: Int, value: Double)
 
 case class SessionDetail(
-    sessionLength: innerInfo,
-    sessionDuration: innerInfo,
-    meanTimePerPage: innerInfo
+  sessionLength:   innerInfo,
+  sessionDuration: innerInfo,
+  meanTimePerPage: innerInfo
 )
 
 case class LogEntry(id: String, timestamp: DateTime, url: String)
 
 case class LogPageEntry(url: String, kind: String, category: String)
 
-class Parse(configFile: Config,
-            db: MongoDatabase,
-            collectionName: String,
-            isJSON: Boolean) {
+class Parse(
+  configFile:     Config,
+  db:             MongoDatabase,
+  collectionName: String,
+  isJSON:         Boolean
+) {
 
   def mode[T, CC[X] <: Seq[X]](
-      coll: CC[T])(implicit o: T => Ordered[T],
-                   cbf: CanBuildFrom[Nothing, T, CC[T]]): CC[T] = {
+    coll: CC[T]
+  )(implicit
+    o: T => Ordered[T],
+    cbf: CanBuildFrom[Nothing, T, CC[T]]): CC[T] = {
     val grouped = coll.groupBy(x => x).mapValues(_.size).toSeq
     val max = grouped.map(_._2).max
     grouped.filter(_._2 == max).map(_._1)(breakOut)
@@ -83,7 +87,8 @@ class Parse(configFile: Config,
     val dateFormat = configFile.getString("kugsha.profiles.logfile.dateFormat")
     val baseUrl =
       configFile.getString("kugsha.crawler.protocol") + configFile.getString(
-          "kugsha.crawler.domain")
+        "kugsha.crawler.domain"
+      )
 
     val lines = Source.fromFile(logPath).getLines.toList
 
@@ -95,11 +100,11 @@ class Parse(configFile: Config,
         val canon: Uri = allUrl.removeAllParams()
         Some {
           LogEntry(
-              lineSplited.get(userIdPosition),
-              DateTimeFormat
-                .forPattern(dateFormat)
-                .parseDateTime(lineSplited.get(timestampPosition)),
-              canon.toString.stripSuffix("/").replace(baseUrl, "")
+            lineSplited.get(userIdPosition),
+            DateTimeFormat
+              .forPattern(dateFormat)
+              .parseDateTime(lineSplited.get(timestampPosition)),
+            canon.toString.stripSuffix("/").replace(baseUrl, "")
           )
         }
       } else None
@@ -123,7 +128,8 @@ class Parse(configFile: Config,
 
     val baseUrl =
       configFile.getString("kugsha.crawler.protocol") + configFile.getString(
-          "kugsha.crawler.domain")
+        "kugsha.crawler.domain"
+      )
 
     val res = mutable.ListBuffer[LogEntry]()
 
@@ -138,7 +144,7 @@ class Parse(configFile: Config,
         val url = Uri.parse(local.get).removeAllParams
 
         if (url.contains(domain) && eventType.isDefined &&
-            eventType.get.equals("pageView")) {
+          eventType.get.equals("pageView")) {
 
           val uid = (json \ "meta" \ "uid").asOpt[String]
           val timestamp = (json \ "meta" \ "timestamp").asOpt[String]
@@ -167,26 +173,31 @@ class Parse(configFile: Config,
           if (uid.isDefined && timestamp.isDefined) {
             val urlToSave = url.toString.replace(baseUrl, "")
             pages += (urlToSave -> LogPageEntry(
-                    urlToSave, kind, cate.getOrElse("notDefined")))
-            res += LogEntry(uid.get,
-                            DateTimeFormat
-                              .forPattern(dateFormat)
-                              .parseDateTime(timestamp.get),
-                            urlToSave)
+              urlToSave, kind, cate.getOrElse("notDefined")
+            ))
+            res += LogEntry(
+              uid.get,
+              DateTimeFormat
+                .forPattern(dateFormat)
+                .parseDateTime(timestamp.get),
+              urlToSave
+            )
           }
         }
       } else if (eventType.isDefined &&
-                 eventType.get.equals("productClickPaid")) {
+        eventType.get.equals("productClickPaid")) {
         val uid = (json \ "meta" \ "uid").asOpt[String]
         val timestamp = (json \ "meta" \ "timestamp").asOpt[String]
 
         if (uid.isDefined && timestamp.isDefined) {
           pages += ("/cart" -> LogPageEntry("/cart", "cart", "cart"))
-          res += LogEntry(uid.get,
-                          DateTimeFormat
-                            .forPattern(dateFormat)
-                            .parseDateTime(timestamp.get),
-                          "/cart")
+          res += LogEntry(
+            uid.get,
+            DateTimeFormat
+              .forPattern(dateFormat)
+              .parseDateTime(timestamp.get),
+            "/cart"
+          )
         }
       }
     }
@@ -207,8 +218,8 @@ class Parse(configFile: Config,
         val category = page.get[BsonArray]("category") match {
           case Some(cat) =>
             Some(cat.getValues
-                  .map(_.asString.getValue.replace(".", "").replace("$", ""))
-                  .toList)
+              .map(_.asString.getValue.replace(".", "").replace("$", ""))
+              .toList)
           case _ => None
         }
         val kind = page.get[BsonString]("type") match {
@@ -224,8 +235,10 @@ class Parse(configFile: Config,
 
     pages.get(url) match {
       case Some(r) =>
-        (Some(List(r.category.replace(".", "").replace("$", ""))),
-         Some(r.kind))
+        (
+          Some(List(r.category.replace(".", "").replace("$", ""))),
+          Some(r.kind)
+        )
       case _ => (None, None)
     }
   }
@@ -238,28 +251,30 @@ class Parse(configFile: Config,
             val sessionThresholdTime =
               configFile.getInt("kugsha.profiles.sessionTimeThreshold")
             if ((rec.timestamp.getMillis -
-                    p.firstTime.getMillis) > (sessionThresholdTime * 60 * 1000)) {
+              p.firstTime.getMillis) > (sessionThresholdTime * 60 * 1000)) {
               val newSession = (ListBuffer(rec.url), 0l)
               p.visitedPages += newSession
               p.firstTime = rec.timestamp
             } else {
               p.visitedPages.last._1 += rec.url
               val temp = (p.visitedPages.last._1,
-                          rec.timestamp.getMillis - p.firstTime.getMillis)
+                rec.timestamp.getMillis - p.firstTime.getMillis)
               p.visitedPages.trimEnd(1)
               p.visitedPages += temp
             }
           case None =>
             users += (
-                rec.id -> Profile(rec.id,
-                                  mutable.HashMap(),
-                                  mutable.HashMap(),
-                                  ListBuffer((ListBuffer(rec.url), 0l)),
-                                  rec.timestamp,
-                                  None,
-                                  None,
-                                  List(),
-                                  None)
+              rec.id -> Profile(
+                rec.id,
+                mutable.HashMap(),
+                mutable.HashMap(),
+                ListBuffer((ListBuffer(rec.url), 0l)),
+                rec.timestamp,
+                None,
+                None,
+                List(),
+                None
+              )
             )
         }
       }
@@ -273,7 +288,7 @@ class Parse(configFile: Config,
         val allPages: ListBuffer[String] = u._2.visitedPages.flatMap(p => p._1)
 
         val averageSessionTime = u._2.visitedPages.foldLeft(0l)((r, p) =>
-              r + (p._2 / u._2.visitedPages.size))
+          r + (p._2 / u._2.visitedPages.size))
 
         allPages.foreach { url =>
           {
@@ -292,23 +307,25 @@ class Parse(configFile: Config,
         }
         val weightsProducts = mutable.HashMap[String, Double]()
         listCat.map(
-            cat => {
-          weightsProducts.get(cat) match {
-            case Some(c) =>
-              weightsProducts += (cat -> (c + (1.0 / listCat.size)))
-            case None => weightsProducts += (cat -> (1.0 / listCat.size))
+          cat => {
+            weightsProducts.get(cat) match {
+              case Some(c) =>
+                weightsProducts += (cat -> (c + (1.0 / listCat.size)))
+              case None => weightsProducts += (cat -> (1.0 / listCat.size))
+            }
           }
-        })
+        )
 
         val weightsTypes = mutable.HashMap[String, Double]()
         listType.map(
-            typ => {
-          weightsTypes.get(typ) match {
-            case Some(t) =>
-              weightsTypes += (typ -> (t + (1.0 / listType.size)))
-            case None => weightsTypes += (typ -> (1.0 / listType.size))
+          typ => {
+            weightsTypes.get(typ) match {
+              case Some(t) =>
+                weightsTypes += (typ -> (t + (1.0 / listType.size)))
+              case None => weightsTypes += (typ -> (1.0 / listType.size))
+            }
           }
-        })
+        )
 
         val sessionInformation: List[SessionDetail] = u._2.visitedPages.map {
           en =>
@@ -339,7 +356,8 @@ class Parse(configFile: Config,
 
               val meanTimePerPage =
                 if (en._2 / en._1.size <= meanTimePerPageDefault.getDouble(
-                        "short"))
+                  "short"
+                ))
                   innerInfo(0, math.abs(en._2 / en._1.size))
                 else if (en._2 > meanTimePerPageDefault.getDouble("long"))
                   innerInfo(2, math.abs(en._2 / en._1.size))
@@ -353,33 +371,42 @@ class Parse(configFile: Config,
         val sessionResume =
           if (sessionInformation.nonEmpty)
             Some(
-                SessionDetail(
-                    innerInfo(average(mode(sessionInformation.map(x =>
-                                            x.sessionLength.cat))).toInt,
-                              average(sessionInformation.map(x =>
-                                        x.sessionLength.value))),
-                    innerInfo(average(mode(sessionInformation.map(x =>
-                                            x.sessionDuration.cat))).toInt,
-                              average(sessionInformation.map(x =>
-                                        x.sessionDuration.value))),
-                    innerInfo(average(mode(sessionInformation.map(x =>
-                                            x.meanTimePerPage.cat))).toInt,
-                              average(sessionInformation.map(x =>
-                                        x.meanTimePerPage.value)))
-                ))
+              SessionDetail(
+                innerInfo(
+                  average(mode(sessionInformation.map(x =>
+                  x.sessionLength.cat))).toInt,
+                  average(sessionInformation.map(x =>
+                    x.sessionLength.value))
+                ),
+                innerInfo(
+                  average(mode(sessionInformation.map(x =>
+                  x.sessionDuration.cat))).toInt,
+                  average(sessionInformation.map(x =>
+                    x.sessionDuration.value))
+                ),
+                innerInfo(
+                  average(mode(sessionInformation.map(x =>
+                  x.meanTimePerPage.cat))).toInt,
+                  average(sessionInformation.map(x =>
+                    x.meanTimePerPage.value))
+                )
+              )
+            )
           else
             None
 
         users += (
-            u._1 -> Profile(u._1,
-                            weightsProducts,
-                            weightsTypes,
-                            u._2.visitedPages,
-                            u._2.firstTime,
-                            Some(averageSessionTime),
-                            Some(allPages.size),
-                            sessionInformation,
-                            sessionResume)
+          u._1 -> Profile(
+            u._1,
+            weightsProducts,
+            weightsTypes,
+            u._2.visitedPages,
+            u._2.firstTime,
+            Some(averageSessionTime),
+            Some(allPages.size),
+            sessionInformation,
+            sessionResume
+          )
         )
       }
     }
@@ -389,51 +416,60 @@ class Parse(configFile: Config,
     users.foreach { u =>
       {
         val collection: MongoCollection[Document] = db.getCollection(
-            configFile.getString("kugsha.database.profilesCollectionName"))
+          configFile.getString("kugsha.database.profilesCollectionName")
+        )
         val document = Document(
-            "_id" -> u._1,
-            "flowSequence" -> u._2.visitedPages
-              .map(p =>
-                    Document(
-                        "flow" -> p._1.toList,
-                        "time" -> Math.abs(p._2 / 1000)
-                  ))
-              .toList,
-            "preferences" -> u._2.preferencesProbabilities.toList,
-            "pageTypes" -> u._2.pageTypeProbabilities.toList,
-            "averageSessionTime" -> Math.abs(
-                u._2.averageTime.getOrElse(0l) / 1000.0),
-            "totalPageViews" -> u._2.totalPageViews.getOrElse(0),
-            "sessionInformation" -> u._2.sessionInfo.map(
-                s =>
-                  Document(
-                      "meanTimePerPage" -> Document(
-                          "level" -> s.meanTimePerPage.cat,
-                          "value" -> s.meanTimePerPage.value / 1000.0), //time to seconds
-                      "sessionDuration" -> Document(
-                          "level" -> s.sessionDuration.cat,
-                          "value" -> s.sessionDuration.value / 1000.0), //time to seconds
-                      "sessionLength" -> Document(
-                          "level" -> s.sessionLength.cat,
-                          "value" -> s.sessionLength.value)
+          "_id" -> u._1,
+          "flowSequence" -> u._2.visitedPages
+            .map(p =>
+              Document(
+                "flow" -> p._1.toList,
+                "time" -> Math.abs(p._2 / 1000)
+              ))
+            .toList,
+          "preferences" -> u._2.preferencesProbabilities.toList,
+          "pageTypes" -> u._2.pageTypeProbabilities.toList,
+          "averageSessionTime" -> Math.abs(
+            u._2.averageTime.getOrElse(0l) / 1000.0
+          ),
+          "totalPageViews" -> u._2.totalPageViews.getOrElse(0),
+          "sessionInformation" -> u._2.sessionInfo.map(
+            s =>
+              Document(
+                "meanTimePerPage" -> Document(
+                  "level" -> s.meanTimePerPage.cat,
+                  "value" -> s.meanTimePerPage.value / 1000.0
+                ), //time to seconds
+                "sessionDuration" -> Document(
+                  "level" -> s.sessionDuration.cat,
+                  "value" -> s.sessionDuration.value / 1000.0
+                ), //time to seconds
+                "sessionLength" -> Document(
+                  "level" -> s.sessionLength.cat,
+                  "value" -> s.sessionLength.value
                 )
-            )
+              )
+          )
         )
         u._2.sessionResume match {
           case Some(s) =>
             document.update(
-                "sessionResume",
-                Document(
-                    "meanTimePerPage" -> Document(
-                        "level" -> s.meanTimePerPage.cat,
-                        "value" -> s.meanTimePerPage.value / 1000.0),
-                    "sessionDuration" -> Document(
-                        "level" -> s.sessionDuration.cat,
-                        "value" -> s.sessionDuration.value / 1000.0),
-                    "sessionLength" -> Document(
-                        "level" -> s.sessionLength.cat,
-                        "value" -> s.sessionLength.value)
-                ))
+              "sessionResume",
+              Document(
+                "meanTimePerPage" -> Document(
+                  "level" -> s.meanTimePerPage.cat,
+                  "value" -> s.meanTimePerPage.value / 1000.0
+                ),
+                "sessionDuration" -> Document(
+                  "level" -> s.sessionDuration.cat,
+                  "value" -> s.sessionDuration.value / 1000.0
+                ),
+                "sessionLength" -> Document(
+                  "level" -> s.sessionLength.cat,
+                  "value" -> s.sessionLength.value
+                )
+              )
+            )
           case None =>
         }
         collection.insertOne(document).headResult()

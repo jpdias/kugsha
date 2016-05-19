@@ -3,7 +3,7 @@ package crawler
 import com.netaporter.uri.Uri
 import java.net.URI
 import com.netaporter.uri.Uri.parse
-import org.jsoup.{nodes, Jsoup}
+import org.jsoup.{ nodes, Jsoup }
 import org.jsoup.nodes.Element
 import org.jsoup.select.Elements
 import org.mongodb.scala._
@@ -13,15 +13,17 @@ import scala.io.Source
 import scala.collection.mutable
 import collection.JavaConversions._
 
-class Crawler(baseUrl: String,
-              domain: String,
-              startPage: String,
-              ignoreList: List[String],
-              ignoreUrlWithList: List[String],
-              db: MongoDatabase,
-              collectionName: String,
-              encoding: String,
-              ignoreParams: Seq[String]) {
+class Crawler(
+  baseUrl:           String,
+  domain:            String,
+  startPage:         String,
+  ignoreList:        List[String],
+  ignoreUrlWithList: List[String],
+  db:                MongoDatabase,
+  collectionName:    String,
+  encoding:          String,
+  ignoreParams:      Seq[String]
+) {
 
   var visited = mutable.Set[String]()
   val frontier = new mutable.Queue[String]
@@ -48,9 +50,9 @@ class Crawler(baseUrl: String,
             ext
         } catch {
           case e: Exception => {
-              println("Bad URL: " + e.getMessage)
-              ""
-            }
+            println("Bad URL: " + e.getMessage)
+            ""
+          }
         }
       }
     }.filter(_.nonEmpty).toList.distinct
@@ -68,32 +70,35 @@ class Crawler(baseUrl: String,
     }
   }
 
-  def writePageToDb(pageCount: Int,
-                    url: String,
-                    pageContent: String,
-                    outboundLinks: List[String]) = Future {
+  def writePageToDb(
+    pageCount:     Int,
+    url:           String,
+    pageContent:   String,
+    outboundLinks: List[String]
+  ) = Future {
     val collection: MongoCollection[Document] =
       db.getCollection(collectionName)
 
     val document: Document = Document(
-        "_id" -> pageCount,
-        "url" -> toRelative(url),
-        "content" -> pageContent,
-        "outbound" -> outboundLinks.map(entry => toRelative(entry)).distinct
+      "_id" -> pageCount,
+      "url" -> toRelative(url),
+      "content" -> pageContent,
+      "outbound" -> outboundLinks.map(entry => toRelative(entry)).distinct
     )
 
     val insertObservable: Observable[Completed] =
       collection.insertOne(document)
 
     insertObservable.subscribe(
-        new Observer[Completed] {
-      override def onNext(result: Completed): Unit =
-        println(s"onNext: $result")
+      new Observer[Completed] {
+        override def onNext(result: Completed): Unit =
+          println(s"onNext: $result")
 
-      override def onError(e: Throwable): Unit = println(s"onError: $e")
+        override def onError(e: Throwable): Unit = println(s"onError: $e")
 
-      override def onComplete(): Unit = println("onComplete")
-    })
+        override def onComplete(): Unit = println("onComplete")
+      }
+    )
   }
 
   def toRelative(url: String): String = {
@@ -131,7 +136,8 @@ class Crawler(baseUrl: String,
     frontier ++= outboundLinks
 
     writePageToDb(
-        pageCount, baseUrl + startPage, pageContent, outboundLinks.toList)
+      pageCount, baseUrl + startPage, pageContent, outboundLinks.toList
+    )
 
     while (frontier.nonEmpty) {
 
