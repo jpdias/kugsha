@@ -1,6 +1,11 @@
-#Reverse Engineering Static Content and Dynamic Behaviour of E-Commerce Sites for Fun and Profit
+# Reverse Engineering Static Content and Dynamic Behaviour of E-Commerce Sites for Fun and Profit
+### Master's Dissertation Work
 
-##Abstract
+[![DOI](https://zenodo.org/badge/doi/10.1016/j.procs.2017.05.355.svg)](http://dx.doi.org/10.1016/j.procs.2017.05.355)
+[![Dissertation ID](https://zenodo.org/badge/doi/10216/85374.svg)](http://hdl.handle.net/10216/85374)
+
+
+## Abstract
 
 Nowadays electronic commerce websites are one of the main transaction tools between on-line merchants and consumers or businesses. These e-commerce websites rely heavily on summarizing and analyzing the behavior of customers, making an effort to influence user actions towards the optimization of success metrics such as CTR (Click through Rate), CPC (Cost per Conversion), Basket and Lifetime Value and User Engagement. Knowledge extraction from the existing e-commerce websites datasets, using data mining and machine learning techniques, have been greatly influencing the Internet marketing activities.
 
